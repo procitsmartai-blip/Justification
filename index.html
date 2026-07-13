@@ -130,23 +130,26 @@ tr:last-child td{border-bottom:none;}
   </div>
 </div>
 
-<!-- ② AWARD SUMMARY (live — fed from Excel) -->
-<div class="section" id="winSumSection">
-  <div class="section-head"><div class="sn">2</div><div class="st">Award Summary</div><div class="sd">Auto-populated from Excel upload</div></div>
-  <div class="section-body" style="padding:14px 18px">
-    <div id="sumEmpty" style="color:var(--muted);font-size:12px;text-align:center;padding:12px 0">
-      Upload your Excel comparison template in <strong>Section 4</strong> to auto-populate the award summary.
+<!-- ② EXCEL UPLOAD -->
+<div class="section">
+  <div class="section-head"><div class="sn green">2</div><div class="st">Tender Data — Excel Upload</div><div class="sd">Items · Vendor bids · Winner selection</div></div>
+  <div class="section-body">
+
+    <!-- Upload zone -->
+    <div class="upload-zone" id="uploadZone"
+         onclick="document.getElementById('xlFile').click()"
+         ondragover="event.preventDefault();this.style.borderColor='var(--accent)'"
+         ondragleave="this.style.borderColor=''"
+         ondrop="event.preventDefault();this.style.borderColor='';handleDrop(event)">
+      <div class="upload-zone-icon">📊</div>
+      <div class="upload-zone-title">Drop Excel file here or click to browse</div>
+      <div class="upload-zone-sub">Accepts .xlsx — platform export format</div>
+      <input type="file" id="xlFile" accept=".xlsx,.xls" style="display:none" onchange="handleFile(this)">
     </div>
-    <div id="sumTotals" style="display:none;margin-top:0;padding:12px 16px;background:#F0F3FB;border-radius:8px;border:1px solid var(--border)">
-      <div style="display:flex;gap:28px;flex-wrap:wrap">
-        <div><div class="sl">Total Awarded Spend</div><div class="sv" id="s_spend" style="font-size:16px;font-weight:800;color:var(--text)">—</div></div>
-        <div><div class="sl">Awarded To</div><div id="s_win" style="font-size:13px;font-weight:700;color:var(--green);margin-top:2px">—</div></div>
-        <div><div class="sl">Savings vs Base Price</div><div class="sv pos" id="s_cai" style="font-size:16px;font-weight:800">—</div></div>
-        <div><div class="sl">Savings vs Market Price</div><div class="sv pos" id="s_cam" style="font-size:16px;font-weight:800">—</div></div>
-        <div><div class="sl">Savings vs Market %</div><div class="sv pos" id="s_pct" style="font-size:16px;font-weight:800">—</div></div>
-      </div>
-    </div>
-    <div id="sumCards" style="display:none;gap:10px;flex-wrap:wrap;margin-top:12px"></div>
+
+    <!-- Preview / FX prompt / Winner selection (shown after upload) -->
+    <div id="xlPreview" style="display:none"></div>
+
   </div>
 </div>
 
@@ -167,26 +170,23 @@ tr:last-child td{border-bottom:none;}
   </div>
 </div>
 
-<!-- ④ EXCEL UPLOAD -->
-<div class="section">
-  <div class="section-head"><div class="sn green">4</div><div class="st">Tender Data — Excel Upload</div><div class="sd">Items · Vendor bids · Winner table</div></div>
-  <div class="section-body">
-
-    <!-- Upload zone -->
-    <div class="upload-zone" id="uploadZone"
-         onclick="document.getElementById('xlFile').click()"
-         ondragover="event.preventDefault();this.style.borderColor='var(--accent)'"
-         ondragleave="this.style.borderColor=''"
-         ondrop="event.preventDefault();this.style.borderColor='';handleDrop(event)">
-      <div class="upload-zone-icon">📊</div>
-      <div class="upload-zone-title">Drop Excel file here or click to browse</div>
-      <div class="upload-zone-sub">Accepts .xlsx — Justif_Comparation_Template format</div>
-      <input type="file" id="xlFile" accept=".xlsx,.xls" style="display:none" onchange="handleFile(this)">
+<!-- ④ AWARD SUMMARY (live — fed from winner selection) -->
+<div class="section" id="winSumSection">
+  <div class="section-head"><div class="sn">4</div><div class="st">Award Summary</div><div class="sd">Auto-populated from winner selection above</div></div>
+  <div class="section-body" style="padding:14px 18px">
+    <div id="sumEmpty" style="color:var(--muted);font-size:12px;text-align:center;padding:12px 0">
+      Upload Excel and select winners in <strong>Section 2</strong> to auto-populate the award summary.
     </div>
-
-    <!-- Preview (shown after upload) -->
-    <div id="xlPreview" style="display:none"></div>
-
+    <div id="sumTotals" style="display:none;margin-top:0;padding:12px 16px;background:#F0F3FB;border-radius:8px;border:1px solid var(--border)">
+      <div style="display:flex;gap:28px;flex-wrap:wrap">
+        <div><div class="sl">Total Awarded Spend</div><div class="sv" id="s_spend" style="font-size:16px;font-weight:800;color:var(--text)">—</div></div>
+        <div><div class="sl">Awarded To</div><div id="s_win" style="font-size:13px;font-weight:700;color:var(--green);margin-top:2px">—</div></div>
+        <div><div class="sl">Savings vs Base Price</div><div class="sv pos" id="s_cai" style="font-size:16px;font-weight:800">—</div></div>
+        <div><div class="sl">Savings vs Market Price</div><div class="sv pos" id="s_cam" style="font-size:16px;font-weight:800">—</div></div>
+        <div><div class="sl">Savings vs Market %</div><div class="sv pos" id="s_pct" style="font-size:16px;font-weight:800">—</div></div>
+      </div>
+    </div>
+    <div id="sumCards" style="display:none;gap:10px;flex-wrap:wrap;margin-top:12px"></div>
   </div>
 </div>
 
@@ -221,6 +221,22 @@ const pL  = (s,n) => String(s??'').slice(0,n).padEnd(n);
 const ctr = (s,w=W) => { const p=Math.max(0,w-s.length); return ' '.repeat(Math.floor(p/2))+s+' '.repeat(Math.ceil(p/2)); };
 const kv  = (k,val,kw=28) => val ? `  ${pL(k,kw)}: ${val}\n` : '';
 
+// Format amount in any currency
+const fmt = (n, cur='IDR') => {
+  if (isNaN(n)||(!n&&n!==0)) return '—';
+  if (!cur || cur==='IDR') return 'IDR ' + Math.round(n).toLocaleString('id-ID');
+  const s = Number(n).toFixed(4).replace(/\.?0+$/, '');
+  return cur + ' ' + s;
+};
+
+// Option B: IDR primary + original currency in brackets (omitted if already IDR)
+const idrOrig = (idrVal, origVal, origCur) => {
+  const base = idr(idrVal);
+  if (!origCur || origCur==='IDR') return base;
+  const s = Number(origVal).toFixed(4).replace(/\.?0+$/, '');
+  return `${base} (${origCur} ${s})`;
+};
+
 function wrap(text, w=W-4, indent='  ') {
   return text.split('\n').map(line => {
     if (line.length<=w) return indent+line;
@@ -246,15 +262,8 @@ function showToast(msg, isErr=false) {
 // ═══════════════════════════════════════════════════════════════════════════
 let excelData = null;
 
-function handleDrop(e) {
-  const file = e.dataTransfer.files[0];
-  if (file) processFile(file);
-}
-
-function handleFile(input) {
-  const file = input.files[0];
-  if (file) processFile(file);
-}
+function handleDrop(e) { const f=e.dataTransfer.files[0]; if(f) processFile(f); }
+function handleFile(input) { const f=input.files[0]; if(f) processFile(f); }
 
 function processFile(file) {
   const reader = new FileReader();
@@ -264,297 +273,474 @@ function processFile(file) {
       const parsed = parseExcel(data);
       if (parsed) {
         excelData = parsed;
-        renderPreview();
-        updSum();
-        showToast('✓ Excel loaded — ' + parsed.items.length + ' items, ' + parsed.vendors.length + ' vendors');
+        const gaps = validateCurrencies(parsed);
+        if (gaps.length) {
+          window._fxGaps = gaps;
+          renderFxPrompt(gaps);
+          showToast('⚠️ Exchange rates required — see Section 2', true);
+        } else {
+          window._fxGaps = [];
+          renderPreview();
+          updSum();
+          showToast('✓ Excel loaded — ' + parsed.items.length + ' items, ' + parsed.vendors.length + ' vendors');
+        }
       } else {
-        showToast('Could not parse file — check template format', true);
+        showToast('Could not parse file — check format', true);
       }
-    } catch(err) {
-      showToast('Error: ' + err.message, true);
-    }
+    } catch(err) { showToast('Error: ' + err.message, true); }
   };
   reader.readAsArrayBuffer(file);
 }
 
-function parseExcel(data) {
-  const wb = XLSX.read(data, {type:'array'});
-  const ws = wb.Sheets[wb.SheetNames[0]];
-  const rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:null});
-
-  // Find header row (col B === 'Items')
-  let hRow = -1;
-  for (let i=0; i<rows.length; i++) {
-    if (rows[i] && String(rows[i][1]||'') === 'Items') { hRow=i; break; }
-  }
-  if (hRow < 0) return null;
-
-  // Vendor names from header row (cols 4, 6, 8, ...)
-  const vendorNames = [];
-  for (let c=4; c<(rows[hRow]?.length||0); c+=2) {
-    if (rows[hRow][c]) vendorNames.push(String(rows[hRow][c]));
-  }
-  if (!vendorNames.length) return null;
-
-  // Parse item data rows (skip sub-header at hRow+1)
-  const items = [];
-  const vendorItemData = vendorNames.map(() => []);
-  let r = hRow + 2;
-  while (r < rows.length) {
-    const row = rows[r];
-    if (!row || row[0]==null || row[0]==='') break;
-    items.push({no:row[0], name:String(row[1]||''), qty:Number(row[2])||0, basePrice:Number(row[3])||0});
-    vendorNames.forEach((_,vi) => {
-      vendorItemData[vi].push({qty:Number(row[4+vi*2])||0, price:Number(row[5+vi*2])||0});
+// ═══════════════════════════════════════════════════════════════════════════
+// CURRENCY VALIDATION & FX RATE HANDLING (Option A+B)
+// ═══════════════════════════════════════════════════════════════════════════
+function validateCurrencies(d) {
+  const seen = new Set();
+  const gaps = [];
+  d.vendors.forEach(v => {
+    v.items.forEach(vi => {
+      if (vi.bidPrice > 0 && vi.bidPriceIDR === 0 && vi.currency && vi.currency !== 'IDR') {
+        const key = v.name + '::' + vi.currency;
+        if (!seen.has(key)) { seen.add(key); gaps.push({vendor: v.name, currency: vi.currency}); }
+      }
     });
-    r++;
-  }
-  if (!items.length) return null;
-
-  // Find winner section
-  let wRow = -1;
-  for (let j=r; j<rows.length; j++) {
-    if (rows[j] && String(rows[j][1]||'').toLowerCase()==='winner') { wRow=j+1; break; }
-  }
-  const winners = [];
-  if (wRow >= 0) {
-    for (let j=wRow; j<rows.length; j++) {
-      const row=rows[j];
-      if (!row||!row[1]) break;
-      winners.push({
-        item:    String(row[1]),
-        vendor:  String(row[2]||''),
-        qty:     Number(row[3])||0,
-        payment: row[4] ? String(row[4]) : '',
-        incoterm:row[5] ? String(row[5]) : ''
-      });
-    }
-  }
-
-  // Build vendor objects with totals
-  const vendors = vendorNames.map((name,vi) => {
-    const its = vendorItemData[vi];
-    return {name, items:its, total: its.reduce((s,it)=>s+it.qty*it.price,0)};
   });
-
-  // Computed metrics
-  const totalBasePrice = items.reduce((s,it)=>s+it.qty*it.basePrice,0);
-  const allVendorSpend = vendors.reduce((s,v)=>s+v.total,0);
-  const marketPrice    = vendors.length ? allVendorSpend/vendors.length : 0;
-
-  // Aggregate winners by vendor — capture payment/incoterm (first non-empty value per vendor)
-  const winnersByVendor = {};
-  winners.forEach(w => {
-    const key = w.vendor;
-    if (!winnersByVendor[key]) winnersByVendor[key] = {items:[], totalSpend:0, payment:'', incoterm:''};
-    if (w.payment  && !winnersByVendor[key].payment)  winnersByVendor[key].payment  = w.payment;
-    if (w.incoterm && !winnersByVendor[key].incoterm) winnersByVendor[key].incoterm = w.incoterm;
-    const vi = vendors.findIndex(vv=>vv.name.toLowerCase()===w.vendor.toLowerCase());
-    const ii = items.findIndex(it=>it.name.toLowerCase()===w.item.toLowerCase());
-    const price = (vi>=0&&ii>=0) ? vendors[vi].items[ii].price : 0;
-    const spend = price * w.qty;
-    winnersByVendor[key].items.push({item:w.item, qty:w.qty, price, spend});
-    winnersByVendor[key].totalSpend += spend;
-  });
-
-  const totalWinnerSpend = Object.values(winnersByVendor).reduce((s,vv)=>s+vv.totalSpend,0);
-  const caVsBase         = totalBasePrice - totalWinnerSpend;
-  const caVsMarket       = marketPrice - totalWinnerSpend;
-  const caVsBasePct      = totalBasePrice ? caVsBase/totalBasePrice : 0;
-  const caVsMarketPct    = marketPrice ? caVsMarket/marketPrice : 0;
-
-  return {
-    items, vendors, winners, winnersByVendor,
-    computed:{totalBasePrice, allVendorSpend, marketPrice, totalWinnerSpend, caVsBase, caVsMarket, caVsBasePct, caVsMarketPct}
-  };
+  return gaps;
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
-// RENDER PREVIEW (Section 3)
-// ═══════════════════════════════════════════════════════════════════════════
-function renderPreview() {
-  const d=excelData; if(!d) return;
-  const c=d.computed;
+function renderFxPrompt(gaps) {
+  // Group vendors by currency
+  const byCur = {};
+  gaps.forEach(g => { if (!byCur[g.currency]) byCur[g.currency]=[]; byCur[g.currency].push(g.vendor); });
 
-  // Build vendor comparison table
-  let tableHtml = `
-    <div class="tw">
-      <table>
-        <thead><tr>
-          <th>Vendor</th>
-          ${d.items.map(it=>`<th style="text-align:right">${it.name}<br><span style="font-weight:400;font-size:9px;text-transform:none">base: ${num(it.basePrice)}</span></th>`).join('')}
-          <th style="text-align:right">Total Spend</th>
-          <th style="text-align:center">vs Base</th>
-        </tr></thead>
-        <tbody>
-          <tr style="background:#F8FAFF">
-            <td style="font-weight:700;color:var(--muted);font-size:11px">BASE PRICE</td>
-            ${d.items.map(it=>`<td style="text-align:right;font-weight:600;color:var(--muted)">${num(it.basePrice)}</td>`).join('')}
-            <td style="text-align:right;font-weight:700;color:var(--muted)">${idr(c.totalBasePrice)}</td>
-            <td style="text-align:center;color:var(--muted)">—</td>
-          </tr>
-          ${d.vendors.map(vv=>{
-            const isW = !!d.winnersByVendor[vv.name];
-            const diff = vv.total - c.totalBasePrice;
-            const diffPct = c.totalBasePrice ? diff/c.totalBasePrice : 0;
-            return `<tr style="${isW?'background:#FAFFFC':''}">
-              <td style="${isW?'border-left:3px solid var(--green);':''};font-weight:600">
-                ${vv.name}${isW?' <span class="badge badge-green">WINNER</span>':''}
-              </td>
-              ${vv.items.map(it=>`<td style="text-align:right">${num(it.price)}</td>`).join('')}
-              <td style="text-align:right;font-weight:700">${idr(vv.total)}</td>
-              <td style="text-align:center;font-size:11px;font-weight:600;color:${diff<0?'var(--green)':'var(--red)'}">
-                ${diff<0?'▼':'▲'} ${Math.abs((diffPct*100)).toFixed(1)}%
-              </td>
-            </tr>`;
-          }).join('')}
-          <tr style="background:#F0F3FB;border-top:2px solid var(--border)">
-            <td colspan="${d.items.length+1}" style="font-size:10px;font-weight:700;color:var(--muted)">
-              AVG MARKET PRICE (sum of all vendor totals ÷ ${d.vendors.length})
-            </td>
-            <td style="text-align:right;font-weight:800;color:var(--accent)">${idr(c.marketPrice)}</td>
-            <td></td>
-          </tr>
-        </tbody>
-      </table>
-    </div>`;
-
-  // Winner cards + key highlights
-  const winnerCards = Object.entries(d.winnersByVendor).map(([vName,vData])=>`
-    <div class="pv-card green">
-      <div class="pv-title" style="color:var(--green)">✓ ${vName}</div>
-      <div class="sl">Items Awarded</div>
-      <div style="font-size:11px;font-weight:600;color:var(--text);margin-bottom:8px">${vData.items.map(i=>i.item).join(', ')}</div>
-      <div class="sl">Total Awarded Spend</div>
-      <div class="sv" style="font-size:15px;margin-bottom:6px">${idr(vData.totalSpend)}</div>
-      ${vData.payment||vData.incoterm ? `<div style="font-size:11px;color:var(--muted)">
-        ${vData.payment  ? `<span style="font-weight:600;color:var(--text)">Payment:</span> ${vData.payment}` : ''}
-        ${vData.payment && vData.incoterm ? ' &nbsp;·&nbsp; ' : ''}
-        ${vData.incoterm ? `<span style="font-weight:600;color:var(--text)">Incoterm:</span> ${vData.incoterm}` : ''}
-      </div>` : ''}
+  const rows = Object.entries(byCur).map(([cur, vendors]) => `
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">
+      <span style="font-weight:800;font-size:13px;min-width:50px">${cur}</span>
+      <span style="font-size:11px;color:var(--muted);flex:1">${vendors.join(', ')}</span>
+      <span style="font-size:12px;font-weight:600;white-space:nowrap">1 ${cur} =</span>
+      <input type="number" id="fx_${cur}" placeholder="e.g. 16500" min="0" step="0.01"
+        style="width:130px;font-size:12px;padding:7px 10px;border:1px solid #F5D87A;border-radius:6px;background:var(--white)">
+      <span style="font-size:12px;font-weight:600">IDR</span>
     </div>`).join('');
 
-  const highlightCard = `
-    <div class="pv-card amber" style="min-width:240px">
-      <div class="pv-title" style="color:var(--amber)">🔑 Key Highlights</div>
-      <div class="sl">Winner Spend vs Base Price</div>
-      <div class="sv sm pos" style="margin-bottom:6px">
-        ${idr(c.totalWinnerSpend)} vs ${idr(c.totalBasePrice)}<br>
-        → savings ${idr(c.caVsBase)} <span style="font-size:10px">(${(c.caVsBasePct*100).toFixed(1)}% below base)</span>
-      </div>
-      <div class="sl">Winner Spend vs Market Price</div>
-      <div class="sv sm pos">
-        ${idr(c.totalWinnerSpend)} vs ${idr(c.marketPrice)}<br>
-        → savings ${idr(c.caVsMarket)} <span style="font-size:10px">(${(c.caVsMarketPct*100).toFixed(1)}% below market)</span>
-      </div>
-    </div>`;
-
-  const vendorTotalsCard = `
-    <div class="pv-card blue" style="min-width:200px">
-      <div class="pv-title" style="color:var(--accent)">📊 Vendor Total Spend</div>
-      ${d.vendors.map(vv=>`
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">
-          <span style="font-size:11px;font-weight:600">${vv.name}</span>
-          <span style="font-size:11px;font-weight:700">${idr(vv.total)}</span>
-        </div>`).join('')}
-      <div style="border-top:1px solid #C0CFFF;margin-top:6px;padding-top:6px;display:flex;justify-content:space-between">
-        <span style="font-size:10px;font-weight:700;color:var(--muted)">Market Avg</span>
-        <span style="font-size:11px;font-weight:800;color:var(--accent)">${idr(c.marketPrice)}</span>
-      </div>
-    </div>`;
-
   document.getElementById('xlPreview').innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
-      <div>
-        <span style="font-weight:700;font-size:13px;color:var(--green)">✓ Excel loaded</span>
-        <span style="font-size:11px;color:var(--muted);margin-left:8px">${d.items.length} items · ${d.vendors.length} vendors · ${d.winners.length} winner row(s)</span>
+    <div style="background:#FFF8E6;border:1px solid #F5D87A;border-radius:8px;padding:16px 18px">
+      <div style="font-weight:700;font-size:13px;color:var(--amber);margin-bottom:6px">⚠️ Exchange Rate Required</div>
+      <div style="font-size:12px;color:var(--text);margin-bottom:14px">
+        The following vendors quoted in non-IDR currencies with no platform-normalized IDR price in this export.
+        Enter the exchange rate to proceed:
       </div>
-      <button class="btn btn-s btn-sm btn-danger" onclick="clearExcel()">✕ Remove</button>
-    </div>
-    ${tableHtml}
-    <div class="pv-cards">${winnerCards}${vendorTotalsCard}${highlightCard}</div>`;
+      ${rows}
+      <div style="margin-top:12px;display:flex;gap:8px;align-items:center">
+        <button class="btn btn-p" onclick="applyFxRates()">✓ Apply Rates &amp; Continue</button>
+        <button class="btn btn-s btn-sm btn-danger" onclick="clearExcel()">✕ Cancel</button>
+        <span style="font-size:10px;color:var(--muted);margin-left:4px">Rates will be applied to all calculations in IDR</span>
+      </div>
+    </div>`;
 
   document.getElementById('xlPreview').style.display = 'block';
   document.getElementById('uploadZone').style.display = 'none';
 }
 
-function clearExcel() {
-  excelData = null;
-  document.getElementById('xlPreview').style.display = 'none';
-  document.getElementById('xlPreview').innerHTML = '';
-  document.getElementById('uploadZone').style.display = 'block';
-  document.getElementById('xlFile').value = '';
+function applyFxRates() {
+  const gaps = window._fxGaps || [];
+  // Collect unique rates
+  const rates = {};
+  let missing = [];
+  gaps.forEach(g => {
+    if (rates[g.currency] !== undefined) return;
+    const r = Number(document.getElementById('fx_' + g.currency)?.value) || 0;
+    if (!r) { missing.push(g.currency); } else { rates[g.currency] = r; }
+  });
+  if (missing.length) { showToast('Enter rate for: ' + missing.join(', '), true); return; }
+
+  // Apply to excelData in place
+  excelData.vendors.forEach(v => {
+    v.items.forEach(vi => {
+      if (vi.bidPriceIDR === 0 && vi.bidPrice > 0 && rates[vi.currency]) {
+        vi.bidPriceIDR = vi.bidPrice * rates[vi.currency];
+        vi.spendIDR    = vi.bidPriceIDR * vi.qty;
+      }
+    });
+    v.totalBidIDR = v.items.reduce((s, it) => s + it.spendIDR, 0);
+  });
+
+  // Recalculate market price
+  const allIDR = excelData.vendors.reduce((s, v) => s + v.totalBidIDR, 0);
+  excelData.computed.allVendorIDR   = allIDR;
+  excelData.computed.marketPriceIDR = excelData.vendors.length ? allIDR / excelData.vendors.length : 0;
+
+  window._fxGaps = [];
+  renderPreview();
   updSum();
+  showToast('✓ Rates applied — ' + Object.entries(rates).map(([c,r])=>`1 ${c} = IDR ${r.toLocaleString('id-ID')}`).join(', '));
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// PER-WINNER METRICS (base & market savings scoped to their won items)
+// PARSE EXCEL — new platform export format
+// Reads: "Items and Services" (original currencies) + "Item Savings" (IDR normalized)
+//        + "Total Savings" (vendor totals IDR)
+// ═══════════════════════════════════════════════════════════════════════════
+function parseExcel(data) {
+  const wb = XLSX.read(data, {type:'array'});
+  const names = wb.SheetNames;
+
+  // Locate sheets — exact match first, then partial fallback
+  const findSheet = (key) => {
+    const k = key.toLowerCase();
+    return names.find(n => n.toLowerCase() === k)
+        || names.find(n => n.toLowerCase().includes(k));
+  };
+  const sItems   = findSheet('Items and Services');
+  const sSavings = findSheet('Item Savings');
+  const sTotal   = findSheet('Total Savings');
+  if (!sItems || !sSavings) return null;
+  // Guard: reject Summary sheet (pivot layout, wrong structure)
+  if (sItems.toLowerCase().includes('summary')) return null;
+
+  const rows = s => XLSX.utils.sheet_to_json(wb.Sheets[s], {header:1, defval:null}).slice(3).filter(r=>r&&r[2]);
+
+  // Items and Services — original currencies
+  // col indices (0-based): 2=supplier, 8=itemName, 13=qty, 14=uom, 15=basePrice, 16=baseCur, 24=bidPrice, 25=bidCur
+  const itemsRows = rows(sItems);
+
+  // Item Savings — IDR normalized
+  // col indices: 2=supplier, 8=itemName, 11=qty, 12=uom, 13=basePriceIDR, 14=bidPriceIDR
+  const savingsRows = rows(sSavings);
+
+  // Build IDR lookup: key = `${supplier}::${itemName}`
+  const idrLookup = {};
+  savingsRows.forEach(r => {
+    const key = `${String(r[2]||'').trim()}::${String(r[8]||'')}`;
+    idrLookup[key] = { basePriceIDR: Number(r[13])||0, bidPriceIDR: Number(r[14])||0 };
+  });
+
+  // Build unique items list (from savings sheet — normalized)
+  const itemsMap = {};
+  savingsRows.forEach(r => {
+    const name = String(r[8]||'');
+    if (!itemsMap[name]) {
+      const qty = Number(r[11])||0;
+      const basePriceIDR = Number(r[13])||0;
+      itemsMap[name] = { name, qty, uom: String(r[12]||''), basePriceIDR, baseTotalIDR: basePriceIDR * qty };
+    }
+  });
+  const items = Object.values(itemsMap);
+
+  // Build vendors from items sheet (original currency per item)
+  const vendorsMap = {};
+  itemsRows.forEach(r => {
+    const supplier = String(r[2]||'').trim();
+    const itemName  = String(r[8]||'');
+    const qty       = Number(r[13])||0;
+    const bidPrice  = Number(r[24])||0;
+    const currency  = String(r[25]||'IDR').trim();
+    const idr       = idrLookup[`${supplier}::${itemName}`] || {basePriceIDR:0, bidPriceIDR:0};
+    if (!vendorsMap[supplier]) vendorsMap[supplier] = { name:supplier, items:[], totalBidIDR:0 };
+    vendorsMap[supplier].items.push({ itemName, qty, bidPrice, currency, bidPriceIDR:idr.bidPriceIDR, spendIDR:idr.bidPriceIDR*qty });
+  });
+
+  // Total Savings — per vendor IDR totals
+  if (sTotal) {
+    rows(sTotal).forEach(r => {
+      const supplier = String(r[2]||'').trim();
+      if (vendorsMap[supplier]) vendorsMap[supplier].totalBidIDR = Number(r[6])||0;
+    });
+  } else {
+    // Fallback: sum item spend
+    Object.values(vendorsMap).forEach(v => {
+      v.totalBidIDR = v.items.reduce((s,it)=>s+it.spendIDR, 0);
+    });
+  }
+
+  const vendors = Object.values(vendorsMap);
+  if (!items.length || !vendors.length) return null;
+  const totalBaseIDR   = items.reduce((s,it)=>s+it.baseTotalIDR, 0);
+  const allVendorIDR   = vendors.reduce((s,v)=>s+v.totalBidIDR, 0);
+  const marketPriceIDR = vendors.length ? allVendorIDR/vendors.length : 0;
+
+  return { items, vendors, computed:{ totalBaseIDR, allVendorIDR, marketPriceIDR } };
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// RENDER PREVIEW (Section 4) — comparison table + winner selection UI
+// ═══════════════════════════════════════════════════════════════════════════
+function renderPreview() {
+  const d = excelData; if (!d) return;
+  const c = d.computed;
+
+  // ── Comparison table ──────────────────────────────────────────────────
+  const vhdr = d.vendors.map(v=>`<th style="text-align:right;max-width:120px">${v.name}</th>`).join('');
+  const trows = d.items.map(it => {
+    const vcells = d.vendors.map(v => {
+      const vi = v.items.find(x=>x.itemName===it.name);
+      return vi ? `<td style="text-align:right;white-space:nowrap">${idr(vi.bidPriceIDR)}${vi.currency!=='IDR'?` <span style="color:var(--muted);font-size:9px">(${vi.currency} ${Number(vi.bidPrice).toFixed(4).replace(/\.?0+$/,'')})</span>`:''}</td>`
+                : `<td style="text-align:center;color:var(--muted)">—</td>`;
+    }).join('');
+    return `<tr>
+      <td style="font-weight:600;font-size:11px">${it.name}</td>
+      <td style="text-align:right;white-space:nowrap">${num(it.qty)} ${it.uom}</td>
+      <td style="text-align:right;color:var(--muted)">${idr(it.basePriceIDR)}</td>
+      ${vcells}
+    </tr>`;
+  }).join('');
+
+  const tableHtml = `<div class="tw" style="margin-bottom:16px">
+    <table><thead><tr>
+      <th>Item</th>
+      <th style="text-align:right">Qty</th>
+      <th style="text-align:right">Base Price (IDR)</th>
+      ${vhdr}
+    </tr></thead><tbody>${trows}</tbody></table>
+  </div>`;
+
+  // ── Winner selection — per item ────────────────────────────────────────
+  const winnerRows = d.items.map((it,ii) => {
+    const itemPrices = d.vendors.map(vv=>{ const x=vv.items.find(y=>y.itemName===it.name); return x?x.bidPriceIDR:Infinity; });
+    const minPriceIDR = Math.min(...itemPrices);
+    const vendorInputs = d.vendors.map((v,vi) => {
+      const vItem = v.items.find(x=>x.itemName===it.name);
+      if (!vItem) return '';
+      const priceDisplay = idrOrig(vItem.bidPriceIDR, vItem.bidPrice, vItem.currency) + ' /unit';
+      const isLowest = vItem.bidPriceIDR <= minPriceIDR;
+      return `<div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
+        <input type="checkbox" id="w_${ii}_${vi}" onchange="toggleWinner(${ii},${vi},this)" style="width:14px;height:14px;cursor:pointer;flex-shrink:0">
+        <label for="w_${ii}_${vi}" style="flex:1;font-size:12px;font-weight:600;cursor:pointer">${v.name}${isLowest?'':' <span style="font-size:9px;color:var(--amber)">●</span>'}</label>
+        <span style="font-size:11px;color:var(--muted);min-width:150px;text-align:right">${priceDisplay}</span>
+        <input type="number" id="qty_${ii}_${vi}" placeholder="qty" min="0" max="${it.qty}"
+          style="width:90px;font-size:12px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--white);display:none"
+          oninput="updateAssigned(${ii});checkFlag(${ii},${vi})">
+      </div>
+      <div id="flag_${ii}_${vi}" style="display:none;margin:0 0 8px 22px;padding:8px 10px;background:#FFF8E6;border:1px solid #F5D87A;border-radius:6px">
+        <div style="font-size:10px;font-weight:700;color:var(--amber);margin-bottom:4px">⚠️ Not the lowest bid for this item — rationale required</div>
+        <textarea id="rationale_${ii}_${vi}" rows="2" style="font-size:11px;width:100%;font-family:inherit" placeholder="e.g. Selected for guaranteed supply continuity despite price premium" oninput="updSum()"></textarea>
+      </div>
+      </div>`;
+    }).join('');
+    return `<div style="padding:12px 14px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;background:var(--bg)">
+      <div style="font-weight:700;font-size:12px;margin-bottom:4px">${it.name}</div>
+      <div style="font-size:10px;color:var(--muted);margin-bottom:8px">Expected: <strong>${num(it.qty)} ${it.uom}</strong></div>
+      ${vendorInputs}
+      <div id="assigned_${ii}" style="font-size:10px;font-weight:600;color:var(--muted);margin-top:6px;padding-top:6px;border-top:1px solid var(--border)">
+        Assigned: 0 / ${num(it.qty)} ${it.uom}
+      </div>
+    </div>`;
+  }).join('');
+
+  // ── Vendor terms (payment + incoterm) — shown dynamically ─────────────
+  const termsHtml = `<div id="vendorTermsWrap" style="display:none;margin-top:14px;padding:14px 16px;background:#EBF0FF;border:1px solid #C0CFFF;border-radius:8px">
+    <div style="font-weight:700;font-size:12px;color:var(--accent);margin-bottom:10px">✍ Payment Terms &amp; Incoterms — per awarded vendor</div>
+    <div id="vendorTerms"></div>
+  </div>`;
+
+  document.getElementById('xlPreview').innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div>
+        <span style="font-weight:700;font-size:13px;color:var(--green)">✓ Excel loaded</span>
+        <span style="font-size:11px;color:var(--muted);margin-left:8px">${d.items.length} items · ${d.vendors.length} vendors</span>
+      </div>
+      <button class="btn btn-s btn-sm btn-danger" onclick="clearExcel()">✕ Remove</button>
+    </div>
+    ${tableHtml}
+    <div style="font-weight:700;font-size:12px;margin-bottom:10px;color:var(--text)">🏆 Select Winners per Item</div>
+    ${winnerRows}
+    ${termsHtml}`;
+
+  document.getElementById('xlPreview').style.display = 'block';
+  document.getElementById('uploadZone').style.display = 'none';
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// WINNER SELECTION HELPERS
+// ═══════════════════════════════════════════════════════════════════════════
+const sanitizeId = name => name.replace(/[^a-zA-Z0-9]/g,'_');
+
+function toggleWinner(ii, vi, cb) {
+  const qtyEl = document.getElementById(`qty_${ii}_${vi}`);
+  if (!qtyEl) return;
+  qtyEl.style.display = cb.checked ? 'inline-block' : 'none';
+  if (cb.checked) { qtyEl.focus(); }
+  else { qtyEl.value = ''; }
+  updateAssigned(ii);
+  updateVendorTerms();
+  checkFlag(ii, vi);
+  updSum();
+}
+
+// Show/hide non-lowest-bidder rationale box for a given item/vendor cell
+function checkFlag(ii, vi) {
+  if (!excelData) return;
+  const it = excelData.items[ii];
+  const vItem = excelData.vendors[vi].items.find(x=>x.itemName===it.name);
+  if (!vItem) return;
+  const prices = excelData.vendors.map(vv=>{ const x=vv.items.find(y=>y.itemName===it.name); return x?x.bidPriceIDR:Infinity; });
+  const minPriceIDR = Math.min(...prices);
+  const isLowest = vItem.bidPriceIDR <= minPriceIDR;
+  const cb   = document.getElementById(`w_${ii}_${vi}`);
+  const flag = document.getElementById(`flag_${ii}_${vi}`);
+  if (flag) flag.style.display = (cb?.checked && !isLowest) ? 'block' : 'none';
+}
+
+function updateAssigned(ii) {
+  if (!excelData) return;
+  const it = excelData.items[ii];
+  let total = 0;
+  excelData.vendors.forEach((_,vi) => {
+    const cb  = document.getElementById(`w_${ii}_${vi}`);
+    const qty = document.getElementById(`qty_${ii}_${vi}`);
+    if (cb?.checked) total += Number(qty?.value)||0;
+  });
+  const el = document.getElementById(`assigned_${ii}`);
+  if (el) {
+    const over = total > it.qty;
+    el.textContent = `Assigned: ${num(total)} / ${num(it.qty)} ${it.uom}`;
+    el.style.color = over ? 'var(--red)' : total===it.qty ? 'var(--green)' : 'var(--muted)';
+  }
+  updSum();
+}
+
+function updateVendorTerms() {
+  const winners = getWinningVendorNames();
+  const container = document.getElementById('vendorTerms');
+  const wrap      = document.getElementById('vendorTermsWrap');
+  if (!container || !wrap) return;
+  wrap.style.display = winners.length ? 'block' : 'none';
+  // Keep existing values when re-rendering
+  const saved = {};
+  winners.forEach(n => {
+    saved[n] = {
+      pay: document.getElementById(`pay_${sanitizeId(n)}`)?.value || '',
+      inc: document.getElementById(`inc_${sanitizeId(n)}`)?.value || ''
+    };
+  });
+  container.innerHTML = winners.map(vName => `
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:8px">
+      <div style="font-weight:700;font-size:12px;min-width:220px;flex-shrink:0;color:var(--green)">✓ ${vName}</div>
+      <div class="fg" style="flex:1;min-width:120px">
+        <label class="fl">Payment Term</label>
+        <input type="text" id="pay_${sanitizeId(vName)}" placeholder="e.g. AP18" value="${saved[vName]?.pay||''}" oninput="updSum()">
+      </div>
+      <div class="fg" style="flex:1;min-width:120px">
+        <label class="fl">Incoterm</label>
+        <input type="text" id="inc_${sanitizeId(vName)}" placeholder="e.g. FCO" value="${saved[vName]?.inc||''}" oninput="updSum()">
+      </div>
+    </div>`).join('');
+}
+
+function getWinningVendorNames() {
+  if (!excelData) return [];
+  const names = new Set();
+  excelData.items.forEach((_,ii) => {
+    excelData.vendors.forEach((v,vi) => {
+      const cb = document.getElementById(`w_${ii}_${vi}`);
+      const qty = document.getElementById(`qty_${ii}_${vi}`);
+      if (cb?.checked && (Number(qty?.value)||0) > 0) names.add(v.name);
+    });
+  });
+  return [...names];
+}
+
+// Build winnersByVendor from UI state
+function getWinnerData() {
+  if (!excelData) return {};
+  const result = {};
+  excelData.items.forEach((it,ii) => {
+    excelData.vendors.forEach((v,vi) => {
+      const cb    = document.getElementById(`w_${ii}_${vi}`);
+      const qtyEl = document.getElementById(`qty_${ii}_${vi}`);
+      if (!cb?.checked) return;
+      const awardedQty = Number(qtyEl?.value)||0;
+      if (awardedQty <= 0) return;
+      const vItem = v.items.find(x=>x.itemName===it.name);
+      if (!vItem) return;
+      if (!result[v.name]) {
+        result[v.name] = {
+          items:[], totalSpendIDR:0,
+          payment:  document.getElementById(`pay_${sanitizeId(v.name)}`)?.value||'',
+          incoterm: document.getElementById(`inc_${sanitizeId(v.name)}`)?.value||''
+        };
+      }
+      const spendIDR = vItem.bidPriceIDR * awardedQty;
+      const allPrices = excelData.vendors.map(vv=>{ const x=vv.items.find(y=>y.itemName===it.name); return x?x.bidPriceIDR:Infinity; });
+      const isLowest = vItem.bidPriceIDR <= Math.min(...allPrices);
+      const rationale = document.getElementById(`rationale_${ii}_${vi}`)?.value || '';
+      result[v.name].items.push({ itemName:it.name, qty:awardedQty, uom:it.uom, bidPrice:vItem.bidPrice, currency:vItem.currency, bidPriceIDR:vItem.bidPriceIDR, spendIDR, isLowest, rationale });
+      result[v.name].totalSpendIDR += spendIDR;
+    });
+  });
+  return result;
+}
+
+// ═══════════════════════════════════════════════════════════════════════════
+// PER-WINNER METRICS (base & market scoped to their awarded items only)
 // ═══════════════════════════════════════════════════════════════════════════
 function winnerMetrics(vData) {
   if (!excelData) return {baseTotal:0, marketTotal:0, savingsVsBase:0, savingsVsMarket:0, basePct:0, marketPct:0};
   const d = excelData;
-  let baseTotal = 0, marketTotal = 0;
+  let baseTotal=0, marketTotal=0;
   vData.items.forEach(wi => {
-    const ii = d.items.findIndex(it => it.name.toLowerCase() === wi.item.toLowerCase());
-    if (ii < 0) return;
-    baseTotal += (d.items[ii].basePrice || 0) * wi.qty;
-    const prices = d.vendors.map(vv => vv.items[ii]?.price || 0).filter(p => p > 0);
+    const it = d.items.find(x=>x.name===wi.itemName);
+    if (it) baseTotal += it.basePriceIDR * wi.qty;
+    const prices = d.vendors.map(v=>{ const vi=v.items.find(x=>x.itemName===wi.itemName); return vi?vi.bidPriceIDR:0; }).filter(p=>p>0);
     const avgP = prices.length ? prices.reduce((a,b)=>a+b,0)/prices.length : 0;
     marketTotal += avgP * wi.qty;
   });
-  const savingsVsBase   = baseTotal   - vData.totalSpend;
-  const savingsVsMarket = marketTotal - vData.totalSpend;
-  return {
-    baseTotal, marketTotal,
-    savingsVsBase,   basePct:   baseTotal   ? savingsVsBase/baseTotal   : 0,
-    savingsVsMarket, marketPct: marketTotal ? savingsVsMarket/marketTotal : 0
-  };
+  const savingsVsBase   = baseTotal   - vData.totalSpendIDR;
+  const savingsVsMarket = marketTotal - vData.totalSpendIDR;
+  return { baseTotal, marketTotal, savingsVsBase, basePct:baseTotal?savingsVsBase/baseTotal:0, savingsVsMarket, marketPct:marketTotal?savingsVsMarket/marketTotal:0 };
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// AWARD SUMMARY (Section 2) — fed from Excel
+// AWARD SUMMARY (Section 2) — fed from winner selection
 // ═══════════════════════════════════════════════════════════════════════════
 function updSum() {
   const empty   = document.getElementById('sumEmpty');
   const cardsEl = document.getElementById('sumCards');
   const totEl   = document.getElementById('sumTotals');
 
-  if (!excelData || !Object.keys(excelData.winnersByVendor).length) {
+  const winners = getWinnerData();
+  if (!excelData || !Object.keys(winners).length) {
     empty.style.display='block'; cardsEl.style.display='none'; totEl.style.display='none'; return;
   }
-
   empty.style.display='none'; cardsEl.style.display='flex'; totEl.style.display='block';
-  const d=excelData; const c=d.computed;
 
-  cardsEl.innerHTML = Object.entries(d.winnersByVendor).map(([vName,vData],wi)=>{
+  const d = excelData; const c = d.computed;
+  const totalWinnerSpendIDR = Object.values(winners).reduce((s,v)=>s+v.totalSpendIDR,0);
+  const caVsBase   = c.totalBaseIDR   - totalWinnerSpendIDR;
+  const caVsMarket = c.marketPriceIDR - totalWinnerSpendIDR;
+
+  // Per-winner cards
+  cardsEl.innerHTML = Object.entries(winners).map(([vName,vData],wi)=>{
     const m = winnerMetrics(vData);
-    return `
-    <div style="background:var(--green-lt);border:1px solid #b6e8d0;border-radius:8px;padding:12px 16px;min-width:220px;flex:1">
-      <div style="font-weight:700;font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">Winner ${wi+1}</div>
-      <div style="font-weight:700;font-size:13px;color:var(--text);margin-bottom:10px">✓ ${vName}</div>
+    return `<div style="background:var(--green-lt);border:1px solid #b6e8d0;border-radius:8px;padding:12px 16px;min-width:220px;flex:1">
+      <div style="font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">Winner ${wi+1}</div>
+      <div style="font-weight:700;font-size:13px;color:var(--text);margin-bottom:8px">✓ ${vName}</div>
       <div class="sl">Items Awarded</div>
-      <div style="font-size:11px;color:var(--muted);margin-bottom:8px">${vData.items.map(i=>i.item).join(', ')}</div>
-      <div class="sl">Total Awarded Spend</div>
-      <div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:6px">${idr(vData.totalSpend)}</div>
-      ${vData.payment ? `<div style="font-size:11px;margin-bottom:2px"><span style="font-weight:700;color:var(--muted)">Payment:</span> ${vData.payment}</div>` : ''}
-      ${vData.incoterm ? `<div style="font-size:11px;margin-bottom:6px"><span style="font-weight:700;color:var(--muted)">Incoterm:</span> ${vData.incoterm}</div>` : ''}
+      <div style="font-size:11px;color:var(--muted);margin-bottom:7px">${vData.items.map(i=>i.itemName).join(', ')}</div>
+      <div class="sl">Total Awarded Spend (IDR)</div>
+      <div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:6px">${idr(vData.totalSpendIDR)}</div>
+      ${vData.payment?`<div style="font-size:11px;margin-bottom:2px"><span style="font-weight:700;color:var(--muted)">Payment:</span> ${vData.payment}</div>`:''}
+      ${vData.incoterm?`<div style="font-size:11px;margin-bottom:6px"><span style="font-weight:700;color:var(--muted)">Incoterm:</span> ${vData.incoterm}</div>`:''}
       <div class="sl" style="margin-top:4px">Total Spend vs Base Price</div>
       <div style="font-size:11px;font-weight:700;color:${m.savingsVsBase>=0?'var(--green)':'var(--red)'};margin-bottom:3px">
-        ${idr(vData.totalSpend)} vs ${idr(m.baseTotal)} → savings ${idr(m.savingsVsBase)} <span style="font-size:10px;font-weight:500">(${(m.basePct*100).toFixed(1)}%)</span>
+        ${idr(vData.totalSpendIDR)} vs ${idr(m.baseTotal)} → ${m.savingsVsBase>=0?'savings':'over'} ${idr(Math.abs(m.savingsVsBase))} (${Math.abs(m.basePct*100).toFixed(1)}%)
       </div>
       <div class="sl">Total Spend vs Market Price</div>
       <div style="font-size:11px;font-weight:700;color:${m.savingsVsMarket>=0?'var(--green)':'var(--red)'}">
-        ${idr(vData.totalSpend)} vs ${idr(m.marketTotal)} → savings ${idr(m.savingsVsMarket)} <span style="font-size:10px;font-weight:500">(${(m.marketPct*100).toFixed(1)}%)</span>
+        ${idr(vData.totalSpendIDR)} vs ${idr(m.marketTotal)} → ${m.savingsVsMarket>=0?'savings':'over'} ${idr(Math.abs(m.savingsVsMarket))} (${Math.abs(m.marketPct*100).toFixed(1)}%)
       </div>
     </div>`;
   }).join('');
 
+  // Totals bar
   const setEl=(eid,val,green)=>{const el=document.getElementById(eid);if(!el)return;el.textContent=val;if(green!==undefined)el.style.color=green?'var(--green)':'var(--red)';};
-  setEl('s_spend', idr(c.totalWinnerSpend));
-  setEl('s_cai',   idr(c.caVsBase), c.caVsBase>0);
-  setEl('s_cam',   idr(c.caVsMarket), c.caVsMarket>0);
-  setEl('s_pct',   pct(c.caVsMarketPct), c.caVsMarket>0);
-  document.getElementById('s_win').textContent = Object.keys(d.winnersByVendor).join(', ');
+  setEl('s_spend', idr(totalWinnerSpendIDR));
+  setEl('s_cai',   idr(Math.abs(caVsBase)),   caVsBase>=0);
+  setEl('s_cam',   idr(Math.abs(caVsMarket)),  caVsMarket>=0);
+  setEl('s_pct',   (Math.abs(c.marketPriceIDR?caVsMarket/c.marketPriceIDR:0)*100).toFixed(1)+'%', caVsMarket>=0);
+  document.getElementById('s_win').textContent = Object.keys(winners).join(', ');
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -562,6 +748,7 @@ function updSum() {
 // ═══════════════════════════════════════════════════════════════════════════
 function gen() {
   updSum();
+  const winners = getWinnerData();
   const now = new Date().toLocaleDateString('id-ID',{day:'2-digit',month:'long',year:'numeric'});
   let o = '';
 
@@ -578,31 +765,35 @@ function gen() {
   if (oa)   o += '  Previous OA / PO Reference:\n'+wrap(oa)+'\n\n';
 
   // ── 2. Award Summary ─────────────────────────────────────────────────────
-  if (excelData && Object.keys(excelData.winnersByVendor).length) {
-    const d=excelData; const c=d.computed; const kw=42;
-    o += '\n'+D1+'\n2.  AWARD SUMMARY\n'+D1+'\n\n';
-
-    // ── Aggregate totals ──
-    const winnerNames = Object.keys(d.winnersByVendor).join(', ');
+  if (excelData && Object.keys(winners).length) {
+    const d=excelData; const c=d.computed; const kw=44;
+    const totalWinnerSpendIDR = Object.values(winners).reduce((s,vv)=>s+vv.totalSpendIDR,0);
+    const caVsBase   = c.totalBaseIDR   - totalWinnerSpendIDR;
+    const caVsMarket = c.marketPriceIDR - totalWinnerSpendIDR;
+    const caVsBasePct   = c.totalBaseIDR   ? caVsBase/c.totalBaseIDR   : 0;
+    const caVsMarketPct = c.marketPriceIDR ? caVsMarket/c.marketPriceIDR : 0;
+    const winnerNames = Object.keys(winners).join(', ');
     const bidderList  = d.vendors.map((vv,i)=>`\n      ${i+1}. ${vv.name}`).join('');
+
+    o += '\n'+D1+'\n2.  AWARD SUMMARY\n'+D1+'\n\n';
     o += `  ${'Bidders List'.padEnd(kw)}: ${bidderList}\n`;
-    o += kv('Awarded To',                 winnerNames, kw);
-    o += kv('Total Awarded Spend',        idr(c.totalWinnerSpend), kw);
-    o += kv('Total Base Price (all items)',         idr(c.totalBasePrice), kw);
-    o += kv('Average Market Price (all vendors)',   `${idr(c.marketPrice)}  (${d.vendors.length} vendor avg)`, kw);
-    o += kv('Total Spend vs Base Price',  `${idr(c.totalWinnerSpend)}  vs  ${idr(c.totalBasePrice)}  →  savings ${idr(c.caVsBase)}  (${(c.caVsBasePct*100).toFixed(1)}% below base)`, kw);
-    o += kv('Total Spend vs Market Price',`${idr(c.totalWinnerSpend)}  vs  ${idr(c.marketPrice)}  →  savings ${idr(c.caVsMarket)}  (${(c.caVsMarketPct*100).toFixed(1)}% below market)`, kw);
+    o += kv('Awarded To',                       winnerNames,                   kw);
+    o += kv('Total Awarded Spend',              idr(totalWinnerSpendIDR),      kw);
+    o += kv('Total Base Price (all items)',      idr(c.totalBaseIDR),           kw);
+    o += kv('Average Market Price (all vendors)',`${idr(c.marketPriceIDR)}  (${d.vendors.length} vendor avg)`, kw);
+    o += kv('Total Spend vs Base Price',         `${idr(totalWinnerSpendIDR)}  vs  ${idr(c.totalBaseIDR)}  →  ${caVsBase>=0?'savings':'over'} ${idr(Math.abs(caVsBase))}  (${Math.abs(caVsBasePct*100).toFixed(1)}%)`, kw);
+    o += kv('Total Spend vs Market Price',       `${idr(totalWinnerSpendIDR)}  vs  ${idr(c.marketPriceIDR)}  →  ${caVsMarket>=0?'savings':'over'} ${idr(Math.abs(caVsMarket))}  (${Math.abs(caVsMarketPct*100).toFixed(1)}%)`, kw);
     o += '\n';
 
-    // ── Per-winner breakdown ──
-    Object.entries(d.winnersByVendor).forEach(([vName,vData],wi)=>{
+    // Per-winner breakdown
+    Object.entries(winners).forEach(([vName,vData],wi)=>{
       const m = winnerMetrics(vData);
       o += `  Winner ${wi+1}: ${vName}\n`;
-      o += kv('    Total Awarded Spend',        idr(vData.totalSpend), kw);
-      if (vData.payment)  o += kv('    Payment Term',              vData.payment,  kw);
-      if (vData.incoterm) o += kv('    Incoterm',                  vData.incoterm, kw);
-      o += kv('    Total Spend vs Base Price',  `${idr(vData.totalSpend)}  vs  ${idr(m.baseTotal)}  →  savings ${idr(m.savingsVsBase)}  (${(m.basePct*100).toFixed(1)}% below base)`, kw);
-      o += kv('    Total Spend vs Market Price',`${idr(vData.totalSpend)}  vs  ${idr(m.marketTotal)}  →  savings ${idr(m.savingsVsMarket)}  (${(m.marketPct*100).toFixed(1)}% below market)`, kw);
+      o += kv('    Total Awarded Spend',        idr(vData.totalSpendIDR), kw);
+      if (vData.payment)  o += kv('    Payment Term',  vData.payment,  kw);
+      if (vData.incoterm) o += kv('    Incoterm',       vData.incoterm, kw);
+      o += kv('    Total Spend vs Base Price',  `${idr(vData.totalSpendIDR)}  vs  ${idr(m.baseTotal)}  →  ${m.savingsVsBase>=0?'savings':'over'} ${idr(Math.abs(m.savingsVsBase))}  (${Math.abs(m.basePct*100).toFixed(1)}%)`, kw);
+      o += kv('    Total Spend vs Market Price',`${idr(vData.totalSpendIDR)}  vs  ${idr(m.marketTotal)}  →  ${m.savingsVsMarket>=0?'savings':'over'} ${idr(Math.abs(m.savingsVsMarket))}  (${Math.abs(m.marketPct*100).toFixed(1)}%)`, kw);
       o += '\n';
     });
   }
@@ -615,32 +806,33 @@ function gen() {
   if (!why && !pen) o += '\n  [TO BE FILLED: Award rationale and special conditions]\n';
   o += '\n';
 
-  // ── 4. Vendor Comparison & Award — winners only ─────────────────────────
-  o += D1+'\n4.  VENDOR COMPARISON & AWARD\n'+D1+'\n';
+  // ── 4. Vendor Comparison & Award ─────────────────────────────────────────
+  o += D1+'\n4.  VENDOR COMPARISON & AWARD\n'+D1+'\n\n';
   if (excelData) {
-    const d=excelData; const c=d.computed;
-    o += '\n';
-
+    const d=excelData;
     d.vendors.forEach((vv,i)=>{
-      const isW = !!d.winnersByVendor[vv.name];
+      const isW = !!winners[vv.name];
       if (isW) {
-        const vData = d.winnersByVendor[vv.name];
+        const vData = winners[vv.name];
         o += `  ✓ WINNER  ${vv.name}\n`;
         vData.items.forEach((it,j)=>{
-          o += `      ${j+1}. ${it.item}  —  qty ${num(it.qty)}  @  ${idr(it.price)}/unit  =  ${idr(it.spend)}\n`;
+          o += `      ${j+1}. ${it.itemName}  —  qty ${num(it.qty)} ${it.uom}  @  ${idrOrig(it.bidPriceIDR,it.bidPrice,it.currency)}/unit  =  ${idr(it.spendIDR)}\n`;
+          if (!it.isLowest) {
+            o += `         ⚠ Non-lowest bid for this item — Rationale: ${it.rationale || '[TO BE FILLED]'}\n`;
+          }
         });
-        o += `      ${'─'.repeat(48)}\n`;
-        o += kv('  Total Awarded Spend', idr(vData.totalSpend), 30);
+        o += `      ${'─'.repeat(52)}\n`;
+        o += kv('  Total Awarded Spend', idr(vData.totalSpendIDR), 30);
         if (vData.payment)  o += kv('  Payment Term', vData.payment,  30);
         if (vData.incoterm) o += kv('  Incoterm',     vData.incoterm, 30);
       } else {
         o += `  Vendor ${i+1}  ${vv.name}\n`;
-        o += kv('  Total Spend', idr(vv.total), 30);
+        o += kv('  Total Bid (IDR)', idr(vv.totalBidIDR), 30);
       }
       o += '\n';
     });
   } else {
-    o += '\n  [TO BE FILLED: Upload Excel template to populate vendor comparison]\n\n';
+    o += '  [TO BE FILLED: Upload Excel to populate vendor comparison]\n\n';
   }
 
   // ── Footer ───────────────────────────────────────────────────────────────
@@ -669,9 +861,18 @@ function copyOut() {
 // ═══════════════════════════════════════════════════════════════════════════
 // CLEAR
 // ═══════════════════════════════════════════════════════════════════════════
+function clearExcel() {
+  excelData = null;
+  document.getElementById('xlPreview').style.display='none';
+  document.getElementById('xlPreview').innerHTML='';
+  document.getElementById('uploadZone').style.display='block';
+  document.getElementById('xlFile').value='';
+  updSum();
+}
+
 function clearForm() {
   if (!confirm('Clear everything?')) return;
-  ['bg_need','bg_oa','bg_pt','j_why','j_pen'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  ['bg_need','bg_oa','j_why','j_pen'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   clearExcel();
   document.getElementById('outArea').style.display='none';
   document.getElementById('outPh').style.display='block';
