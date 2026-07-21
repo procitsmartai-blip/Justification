@@ -147,6 +147,16 @@ tr:last-child td{border-bottom:none;}
       <input type="file" id="xlFile" accept=".xlsx,.xls" style="display:none" onchange="handleFile(this)">
     </div>
 
+    <!-- Last Price upload bar — always visible -->
+    <div style="margin-top:10px;padding:10px 14px;background:#F8FAFF;border:1px dashed var(--border);border-radius:8px;display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+      <span style="font-size:10px;font-weight:700;color:var(--accent);white-space:nowrap">📋 LAST PRICE FILE</span>
+      <span style="font-size:11px;color:var(--muted);flex:1">Optional — upload to show ↑↓ price movement vs last PO/OA</span>
+      <div id="lpStatus" style="display:none;font-size:11px;font-weight:700;color:var(--green)">✓ loaded</div>
+      <button class="btn btn-s btn-sm btn-danger" id="lpClear" onclick="clearLP()" style="display:none">✕ Remove</button>
+      <button class="btn btn-s btn-sm" onclick="document.getElementById('lpFile').click()">↑ Upload Last Price</button>
+      <input type="file" id="lpFile" accept=".xlsx,.xls" style="display:none" onchange="handleLPFile(this)">
+    </div>
+
     <!-- Preview / FX prompt / Winner selection (shown after upload) -->
     <div id="xlPreview" style="display:none"></div>
 
@@ -260,7 +270,60 @@ function showToast(msg, isErr=false) {
 // ═══════════════════════════════════════════════════════════════════════════
 // EXCEL STATE
 // ═══════════════════════════════════════════════════════════════════════════
-let excelData = null;
+let excelData   = null;
+let lastPriceMap = null;   // key: 'id::ItemID' or 'desc::lowercase_desc' → {lastPrice, poRef, date, notes}
+
+// ── Last Price file handlers ────────────────────────────────────────────────
+function handleLPFile(input) {
+  const f = input.files[0]; if (!f) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    try {
+      const wb  = XLSX.read(new Uint8Array(e.target.result), {type:'array'});
+      const ws  = wb.Sheets[wb.SheetNames[0]];
+      const rows= XLSX.utils.sheet_to_json(ws, {header:1, defval:null});
+      const map = {};
+      let count = 0;
+      rows.forEach((row, i) => {
+        if (i < 3) return;                            // skip title + instruction + header
+        const itemId = row[0] ? String(row[0]).trim() : '';
+        const desc   = row[1] ? String(row[1]).trim() : '';
+        const price  = Number(row[2]) || 0;
+        const poRef  = row[3] ? String(row[3]).trim() : '';
+        const date   = row[4] ? String(row[4]).trim() : '';
+        const notes  = row[5] ? String(row[5]).trim() : '';
+        if (!price || (!itemId && !desc)) return;
+        const entry = {lastPrice:price, poRef, date, notes, itemId, desc};
+        if (itemId) map[`id::${itemId}`]             = entry;
+        if (desc)   map[`desc::${desc.toLowerCase()}`] = entry;
+        count++;
+      });
+      lastPriceMap = count ? map : null;
+      document.getElementById('lpStatus').style.display = count ? 'block' : 'none';
+      document.getElementById('lpStatus').textContent   = `✓ ${count} item(s) loaded`;
+      document.getElementById('lpClear').style.display  = count ? 'inline-flex' : 'none';
+      if (count) { renderPreview(); showToast(`✓ Last Price loaded — ${count} items`); }
+      else         showToast('No valid rows found in Last Price file', true);
+    } catch(err) { showToast('Last Price parse error: ' + err.message, true); }
+  };
+  reader.readAsArrayBuffer(f);
+}
+
+function clearLP() {
+  lastPriceMap = null;
+  document.getElementById('lpFile').value = '';
+  document.getElementById('lpStatus').style.display = 'none';
+  document.getElementById('lpClear').style.display  = 'none';
+  renderPreview();
+  showToast('Last Price data cleared');
+}
+
+function getLastPrice(item) {
+  if (!lastPriceMap) return null;
+  return lastPriceMap[`id::${item.itemId||''}`]
+      || lastPriceMap[`desc::${(item.name||'').toLowerCase()}`]
+      || null;
+}
 
 function handleDrop(e) { const f=e.dataTransfer.files[0]; if(f) processFile(f); }
 function handleFile(input) { const f=input.files[0]; if(f) processFile(f); }
@@ -423,23 +486,30 @@ function parseExcel(data) {
     if (!itemsMap[name]) {
       const qty = Number(r[11])||0;
       const basePriceIDR = Number(r[13])||0;
-      itemsMap[name] = { name, qty, uom: String(r[12]||''), basePriceIDR, baseTotalIDR: basePriceIDR * qty };
+      itemsMap[name] = { name, qty, uom: String(r[12]||''), basePriceIDR, baseTotalIDR: basePriceIDR * qty, itemId:'' };
     }
   });
-  const items = Object.values(itemsMap);
 
   // Build vendors from items sheet (original currency per item)
   const vendorsMap = {};
   itemsRows.forEach(r => {
-    const supplier = String(r[2]||'').trim();
-    const itemName  = String(r[8]||'');
-    const qty       = Number(r[13])||0;
-    const bidPrice  = Number(r[24])||0;
-    const currency  = String(r[25]||'IDR').trim();
-    const idr       = idrLookup[`${supplier}::${itemName}`] || {basePriceIDR:0, bidPriceIDR:0};
+    const supplier    = String(r[2]||'').trim();
+    const itemName    = String(r[8]||'');
+    const qty         = Number(r[13])||0;
+    const bidPrice    = Number(r[24])||0;
+    const currency    = String(r[25]||'IDR').trim();
+    const leadTime    = r[26]!=null ? String(r[26]).trim() : '';
+    const partNumber  = r[27]!=null ? String(r[27]).trim() : '';
+    const shippingTerm= r[29]!=null ? String(r[29]).trim() : '';
+    const itemId      = r[7] !=null ? String(r[7]).trim()  : '';
+    const idr         = idrLookup[`${supplier}::${itemName}`] || {basePriceIDR:0, bidPriceIDR:0};
+    // Backfill itemId onto itemsMap (buyer-side, same across vendors)
+    if (itemsMap[itemName] && itemId && !itemsMap[itemName].itemId) itemsMap[itemName].itemId = itemId;
     if (!vendorsMap[supplier]) vendorsMap[supplier] = { name:supplier, items:[], totalBidIDR:0 };
-    vendorsMap[supplier].items.push({ itemName, qty, bidPrice, currency, bidPriceIDR:idr.bidPriceIDR, spendIDR:idr.bidPriceIDR*qty });
+    vendorsMap[supplier].items.push({ itemName, qty, bidPrice, currency, bidPriceIDR:idr.bidPriceIDR, spendIDR:idr.bidPriceIDR*qty, leadTime, shippingTerm, partNumber, itemId });
   });
+
+  const items = Object.values(itemsMap);
 
   // Total Savings — per vendor IDR totals
   if (sTotal) {
@@ -475,22 +545,49 @@ function renderPreview() {
   const trows = d.items.map(it => {
     const vcells = d.vendors.map(v => {
       const vi = v.items.find(x=>x.itemName===it.name);
-      return vi ? `<td style="text-align:right;white-space:nowrap">${idr(vi.bidPriceIDR)}${vi.currency!=='IDR'?` <span style="color:var(--muted);font-size:9px">(${vi.currency} ${Number(vi.bidPrice).toFixed(4).replace(/\.?0+$/,'')})</span>`:''}</td>`
-                : `<td style="text-align:center;color:var(--muted)">—</td>`;
+      if (!vi) return `<td style="text-align:center;color:var(--muted)">—</td>`;
+      const ltTag  = vi.leadTime   ? `<span style="font-size:9px;color:var(--muted)">LT: ${vi.leadTime}d</span>` : '';
+      const stTag  = vi.shippingTerm ? `<span style="font-size:9px;color:var(--muted)">${vi.shippingTerm}</span>` : '';
+      const origTag = vi.currency!=='IDR' ? `<span style="color:var(--muted);font-size:9px">(${vi.currency} ${Number(vi.bidPrice).toFixed(4).replace(/\.?0+$/,'')})</span>` : '';
+      const pnTag = vi.partNumber ? `<span style="font-size:9px;color:var(--muted)">PN: ${vi.partNumber}</span>` : '';
+      const lp2   = getLastPrice(it);
+      const lpDelta = (lp2 && vi.bidPriceIDR && lp2.lastPrice)
+        ? (vi.bidPriceIDR - lp2.lastPrice) / lp2.lastPrice : null;
+      const lpTag2 = lpDelta !== null
+        ? `<span style="font-size:9px;font-weight:700;color:${lpDelta>0?'var(--red)':'var(--green)'}">
+            ${lpDelta>0?'↑':'↓'}${Math.abs(lpDelta*100).toFixed(1)}% vs LP
+           </span>` : '';
+      return `<td style="text-align:right;white-space:nowrap;vertical-align:middle">
+        ${idr(vi.bidPriceIDR)} ${origTag}
+        ${(ltTag||stTag)?`<br><span style="display:flex;gap:6px;justify-content:flex-end">${ltTag}${stTag}</span>`:''}
+        ${(pnTag||lpTag2)?`<br><span style="display:flex;gap:6px;justify-content:flex-end">${pnTag}${lpTag2}</span>`:''}
+      </td>`;
     }).join('');
+    const idTag = it.itemId ? `<span style="font-size:9px;font-weight:700;color:var(--accent);margin-right:4px">[${it.itemId}]</span>` : '';
+    const lp    = getLastPrice(it);
+    const lpCell = lp
+      ? `<td style="text-align:right;vertical-align:middle;white-space:nowrap">
+          <div style="font-weight:700;font-size:11px">${idr(lp.lastPrice)}</div>
+          ${lp.poRef ? `<div style="font-size:9px;color:var(--muted)">${lp.poRef}</div>` : ''}
+          ${lp.date  ? `<div style="font-size:9px;color:var(--muted)">${lp.date}</div>`  : ''}
+         </td>`
+      : (lastPriceMap ? `<td style="text-align:center;color:var(--muted);font-size:10px">—</td>` : '');
     return `<tr>
-      <td style="font-weight:600;font-size:11px">${it.name}</td>
+      <td style="font-weight:600;font-size:11px">${idTag}${it.name}</td>
       <td style="text-align:right;white-space:nowrap">${num(it.qty)} ${it.uom}</td>
       <td style="text-align:right;color:var(--muted)">${idr(it.basePriceIDR)}</td>
+      ${lpCell}
       ${vcells}
     </tr>`;
   }).join('');
 
+  const lpColHdr = lastPriceMap ? `<th style="text-align:right">Last Price (IDR)</th>` : '';
   const tableHtml = `<div class="tw" style="margin-bottom:16px">
     <table><thead><tr>
       <th>Item</th>
       <th style="text-align:right">Qty</th>
       <th style="text-align:right">Base Price (IDR)</th>
+      ${lpColHdr}
       ${vhdr}
     </tr></thead><tbody>${trows}</tbody></table>
   </div>`;
@@ -502,13 +599,14 @@ function renderPreview() {
     const vendorInputs = d.vendors.map((v,vi) => {
       const vItem = v.items.find(x=>x.itemName===it.name);
       if (!vItem) return '';
-      const priceDisplay = idrOrig(vItem.bidPriceIDR, vItem.bidPrice, vItem.currency) + ' /unit';
+      const ltst = [vItem.leadTime?`LT: ${vItem.leadTime}d`:'', vItem.shippingTerm||''].filter(Boolean).join(' · ');
+      const priceDisplay = idrOrig(vItem.bidPriceIDR, vItem.bidPrice, vItem.currency) + ' /unit' + (ltst ? `  ·  ${ltst}` : '');
       const isLowest = vItem.bidPriceIDR <= minPriceIDR;
       return `<div>
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:5px">
         <input type="checkbox" id="w_${ii}_${vi}" onchange="toggleWinner(${ii},${vi},this)" style="width:14px;height:14px;cursor:pointer;flex-shrink:0">
         <label for="w_${ii}_${vi}" style="flex:1;font-size:12px;font-weight:600;cursor:pointer">${v.name}${isLowest?'':' <span style="font-size:9px;color:var(--amber)">●</span>'}</label>
-        <span style="font-size:11px;color:var(--muted);min-width:150px;text-align:right">${priceDisplay}</span>
+        <span style="font-size:11px;color:var(--muted);min-width:150px;text-align:right">${priceDisplay}${vItem.partNumber?' · <span style="font-size:9px">PN: '+vItem.partNumber+'</span>':''}</span>
         <input type="number" id="qty_${ii}_${vi}" placeholder="qty" min="0" max="${it.qty}"
           style="width:90px;font-size:12px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--white);display:none"
           oninput="updateAssigned(${ii});checkFlag(${ii},${vi})">
@@ -519,8 +617,9 @@ function renderPreview() {
       </div>
       </div>`;
     }).join('');
+    const itemIdBadge = it.itemId ? `<span style="font-size:9px;font-weight:700;color:var(--accent);margin-right:5px">[${it.itemId}]</span>` : '';
     return `<div style="padding:12px 14px;border:1px solid var(--border);border-radius:8px;margin-bottom:8px;background:var(--bg)">
-      <div style="font-weight:700;font-size:12px;margin-bottom:4px">${it.name}</div>
+      <div style="font-weight:700;font-size:12px;margin-bottom:4px">${itemIdBadge}${it.name}</div>
       <div style="font-size:10px;color:var(--muted);margin-bottom:8px">Expected: <strong>${num(it.qty)} ${it.uom}</strong></div>
       ${vendorInputs}
       <div id="assigned_${ii}" style="font-size:10px;font-weight:600;color:var(--muted);margin-top:6px;padding-top:6px;border-top:1px solid var(--border)">
@@ -561,8 +660,11 @@ function toggleWinner(ii, vi, cb) {
   const qtyEl = document.getElementById(`qty_${ii}_${vi}`);
   if (!qtyEl) return;
   qtyEl.style.display = cb.checked ? 'inline-block' : 'none';
-  if (cb.checked) { qtyEl.focus(); }
-  else { qtyEl.value = ''; }
+  if (cb.checked) {
+    qtyEl.value = excelData?.items[ii]?.qty || '';   // auto-fill full expected qty
+  } else {
+    qtyEl.value = '';
+  }
   updateAssigned(ii);
   updateVendorTerms();
   checkFlag(ii, vi);
@@ -610,9 +712,13 @@ function updateVendorTerms() {
   // Keep existing values when re-rendering
   const saved = {};
   winners.forEach(n => {
+    // Auto-populate Incoterm from Excel shipping term if field is currently empty
+    const existingInc = document.getElementById(`inc_${sanitizeId(n)}`)?.value || '';
+    const v = excelData?.vendors.find(vv=>vv.name===n);
+    const autoInc = existingInc || (v?.items?.[0]?.shippingTerm || '');
     saved[n] = {
       pay: document.getElementById(`pay_${sanitizeId(n)}`)?.value || '',
-      inc: document.getElementById(`inc_${sanitizeId(n)}`)?.value || ''
+      inc: autoInc
     };
   });
   container.innerHTML = winners.map(vName => `
@@ -666,7 +772,7 @@ function getWinnerData() {
       const allPrices = excelData.vendors.map(vv=>{ const x=vv.items.find(y=>y.itemName===it.name); return x?x.bidPriceIDR:Infinity; });
       const isLowest = vItem.bidPriceIDR <= Math.min(...allPrices);
       const rationale = document.getElementById(`rationale_${ii}_${vi}`)?.value || '';
-      result[v.name].items.push({ itemName:it.name, qty:awardedQty, uom:it.uom, bidPrice:vItem.bidPrice, currency:vItem.currency, bidPriceIDR:vItem.bidPriceIDR, spendIDR, isLowest, rationale });
+      result[v.name].items.push({ itemName:it.name, itemId:it.itemId||'', partNumber:vItem.partNumber||'', qty:awardedQty, uom:it.uom, bidPrice:vItem.bidPrice, currency:vItem.currency, bidPriceIDR:vItem.bidPriceIDR, spendIDR, isLowest, rationale, leadTime:vItem.leadTime||'', shippingTerm:vItem.shippingTerm||'' });
       result[v.name].totalSpendIDR += spendIDR;
     });
   });
@@ -721,6 +827,7 @@ function updSum() {
       <div style="font-size:11px;color:var(--muted);margin-bottom:7px">${vData.items.map(i=>i.itemName).join(', ')}</div>
       <div class="sl">Total Awarded Spend (IDR)</div>
       <div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:6px">${idr(vData.totalSpendIDR)}</div>
+      ${(()=>{const ls=vendorLTST(vData);return [ls.leadTime?`<span style="font-size:11px;margin-bottom:2px;display:block"><span style="font-weight:700;color:var(--muted)">Lead Time:</span> ${ls.leadTime}${ls.ltConsistent?' days':' days (varies)'}</span>`:'',ls.shippingTerm?`<span style="font-size:11px;margin-bottom:2px;display:block"><span style="font-weight:700;color:var(--muted)">Shipping:</span> ${ls.shippingTerm}${ls.stConsistent?'':' (varies)'}</span>`:''].join('');})()}
       ${vData.payment?`<div style="font-size:11px;margin-bottom:2px"><span style="font-weight:700;color:var(--muted)">Payment:</span> ${vData.payment}</div>`:''}
       ${vData.incoterm?`<div style="font-size:11px;margin-bottom:6px"><span style="font-weight:700;color:var(--muted)">Incoterm:</span> ${vData.incoterm}</div>`:''}
       <div class="sl" style="margin-top:4px">Total Spend vs Base Price</div>
@@ -746,6 +853,19 @@ function updSum() {
 // ═══════════════════════════════════════════════════════════════════════════
 // GENERATOR
 // ═══════════════════════════════════════════════════════════════════════════
+// Smart collapse: if lead time/shipping consistent across all winner's items → vendor level
+// otherwise → per item level
+function vendorLTST(vData) {
+  const lts = [...new Set(vData.items.map(i=>i.leadTime||'').filter(Boolean))];
+  const sts = [...new Set(vData.items.map(i=>i.shippingTerm||'').filter(Boolean))];
+  return {
+    ltConsistent:  lts.length <= 1,
+    stConsistent:  sts.length <= 1,
+    leadTime:      lts.length === 1 ? lts[0] : lts.join(' / '),
+    shippingTerm:  sts.length === 1 ? sts[0] : sts.join(' / ')
+  };
+}
+
 function gen() {
   updSum();
   const winners = getWinnerData();
@@ -789,9 +909,11 @@ function gen() {
     Object.entries(winners).forEach(([vName,vData],wi)=>{
       const m = winnerMetrics(vData);
       o += `  Winner ${wi+1}: ${vName}\n`;
+      const ltst2 = vendorLTST(vData);
       o += kv('    Total Awarded Spend',        idr(vData.totalSpendIDR), kw);
+      if (ltst2.leadTime)    o += kv('    Lead Time',     ltst2.leadTime + (ltst2.ltConsistent ? ' days' : ' days (varies)'), kw);
+      if (ltst2.shippingTerm)o += kv('    Incoterm',      ltst2.shippingTerm + (ltst2.stConsistent ? '' : ' (varies)'), kw);
       if (vData.payment)  o += kv('    Payment Term',  vData.payment,  kw);
-      if (vData.incoterm) o += kv('    Incoterm',       vData.incoterm, kw);
       o += kv('    Total Spend vs Base Price',  `${idr(vData.totalSpendIDR)}  vs  ${idr(m.baseTotal)}  →  ${m.savingsVsBase>=0?'savings':'over'} ${idr(Math.abs(m.savingsVsBase))}  (${Math.abs(m.basePct*100).toFixed(1)}%)`, kw);
       o += kv('    Total Spend vs Market Price',`${idr(vData.totalSpendIDR)}  vs  ${idr(m.marketTotal)}  →  ${m.savingsVsMarket>=0?'savings':'over'} ${idr(Math.abs(m.savingsVsMarket))}  (${Math.abs(m.marketPct*100).toFixed(1)}%)`, kw);
       o += '\n';
@@ -814,17 +936,26 @@ function gen() {
       const isW = !!winners[vv.name];
       if (isW) {
         const vData = winners[vv.name];
+        const ltst = vendorLTST(vData);
         o += `  ✓ WINNER  ${vv.name}\n`;
         vData.items.forEach((it,j)=>{
-          o += `      ${j+1}. ${it.itemName}  —  qty ${num(it.qty)} ${it.uom}  @  ${idrOrig(it.bidPriceIDR,it.bidPrice,it.currency)}/unit  =  ${idr(it.spendIDR)}\n`;
+          const idPfx = it.itemId    ? `[${it.itemId}] ` : '';
+          const pnSfx = it.partNumber ? ` [PN: ${it.partNumber}]` : '';
+          o += `      ${j+1}. ${idPfx}${it.itemName}${pnSfx}  —  qty ${num(it.qty)} ${it.uom}  @  ${idrOrig(it.bidPriceIDR,it.bidPrice,it.currency)}/unit  =  ${idr(it.spendIDR)}\n`;
+
           if (!it.isLowest) {
             o += `         ⚠ Non-lowest bid for this item — Rationale: ${it.rationale || '[TO BE FILLED]'}\n`;
           }
+          // Decision 3X: per-item LT/shipping if varying across this vendor's items
+          if (!ltst.ltConsistent && it.leadTime)    o += `         Lead Time     : ${it.leadTime} days\n`;
+          if (!ltst.stConsistent && it.shippingTerm) o += `         Incoterm      : ${it.shippingTerm}\n`;
         });
         o += `      ${'─'.repeat(52)}\n`;
         o += kv('  Total Awarded Spend', idr(vData.totalSpendIDR), 30);
-        if (vData.payment)  o += kv('  Payment Term', vData.payment,  30);
-        if (vData.incoterm) o += kv('  Incoterm',     vData.incoterm, 30);
+        // Decision 3Y: vendor-level LT/shipping if consistent
+        if (ltst.ltConsistent && ltst.leadTime)     o += kv('  Lead Time',      ltst.leadTime + ' days', 30);
+        if (ltst.stConsistent && ltst.shippingTerm) o += kv('  Incoterm',       ltst.shippingTerm,       30);
+        if (vData.payment)  o += kv('  Payment Term',  vData.payment,           30);
       } else {
         o += `  Vendor ${i+1}  ${vv.name}\n`;
         o += kv('  Total Bid (IDR)', idr(vv.totalBidIDR), 30);
