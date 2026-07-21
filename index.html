@@ -917,6 +917,12 @@ function gen() {
     o += kv('Average Market Price (all vendors)',`${idr(c.marketPriceIDR)}  (${d.vendors.length} vendor avg)`, kw);
     o += kv('Total Spend vs Base Price',         `${idr(totalWinnerSpendIDR)}  vs  ${idr(c.totalBaseIDR)}  →  ${caVsBase>=0?'savings':'over'} ${idr(Math.abs(caVsBase))}  (${Math.abs(caVsBasePct*100).toFixed(1)}%)`, kw);
     o += kv('Total Spend vs Market Price',       `${idr(totalWinnerSpendIDR)}  vs  ${idr(c.marketPriceIDR)}  →  ${caVsMarket>=0?'savings':'over'} ${idr(Math.abs(caVsMarket))}  (${Math.abs(caVsMarketPct*100).toFixed(1)}%)`, kw);
+    // Total vs Last Price (aggregate across all winner items)
+    if (lastPriceMap) {
+      let totalLP=0, lpOk=true;
+      Object.values(winners).forEach(vd=>{ vd.items.forEach(wi=>{ const itObj=d.items.find(x=>x.name===wi.itemName); const lpr=itObj?getLastPrice(itObj):null; if(lpr&&lpr.lastPrice) totalLP+=lpr.lastPrice*wi.qty; else lpOk=false; }); });
+      if (totalLP>0) { const ld=(totalWinnerSpendIDR-totalLP)/totalLP; o += kv('Total Spend vs Last Price', `${idr(totalWinnerSpendIDR)}  vs  ${idr(totalLP)}  →  ${ld>=0?'↑':'↓'}${Math.abs(ld*100).toFixed(1)}% vs LP${!lpOk?' (partial coverage)':''}`, kw); }
+    }
     o += '\n';
 
     // Per-winner breakdown
@@ -930,6 +936,11 @@ function gen() {
       if (vData.payment)  o += kv('    Payment Term',  vData.payment,  kw);
       o += kv('    Total Spend vs Base Price',  `${idr(vData.totalSpendIDR)}  vs  ${idr(m.baseTotal)}  →  ${m.savingsVsBase>=0?'savings':'over'} ${idr(Math.abs(m.savingsVsBase))}  (${Math.abs(m.basePct*100).toFixed(1)}%)`, kw);
       o += kv('    Total Spend vs Market Price',`${idr(vData.totalSpendIDR)}  vs  ${idr(m.marketTotal)}  →  ${m.savingsVsMarket>=0?'savings':'over'} ${idr(Math.abs(m.savingsVsMarket))}  (${Math.abs(m.marketPct*100).toFixed(1)}%)`, kw);
+      if (lastPriceMap) {
+        let vLP=0, vLPOk=true;
+        vData.items.forEach(wi=>{ const itObj=excelData.items.find(x=>x.name===wi.itemName); const lpr=itObj?getLastPrice(itObj):null; if(lpr&&lpr.lastPrice) vLP+=lpr.lastPrice*wi.qty; else vLPOk=false; });
+        if (vLP>0) { const ld=(vData.totalSpendIDR-vLP)/vLP; o += kv('    Total Spend vs Last Price',`${idr(vData.totalSpendIDR)}  vs  ${idr(vLP)}  →  ${ld>=0?'↑':'↓'}${Math.abs(ld*100).toFixed(1)}% vs LP${!vLPOk?' (partial)':''}`, kw); }
+      }
       o += '\n';
     });
   }
@@ -956,7 +967,14 @@ function gen() {
           const idPfx = it.itemId    ? `[${it.itemId}] ` : '';
           const pnSfx = it.partNumber ? ` [PN: ${it.partNumber}]` : '';
           o += `      ${j+1}. ${idPfx}${it.itemName}${pnSfx}  —  qty ${num(it.qty)} ${it.uom}  @  ${idrOrig(it.bidPriceIDR,it.bidPrice,it.currency)}/unit  =  ${idr(it.spendIDR)}\n`;
-
+          if (lastPriceMap) {
+            const itObj2 = excelData.items.find(x=>x.name===it.itemName);
+            const lpr2   = itObj2 ? getLastPrice(itObj2) : null;
+            if (lpr2 && lpr2.lastPrice && it.bidPriceIDR) {
+              const ld2 = (it.bidPriceIDR - lpr2.lastPrice) / lpr2.lastPrice;
+              o += `         ${ld2>=0?'↑':'↓'}${Math.abs(ld2*100).toFixed(1)}% vs LP  (last: ${idr(lpr2.lastPrice)}/unit)\n`;
+            }
+          }
           if (!it.isLowest) {
             o += `         ⚠ Non-lowest bid for this item — Rationale: ${it.rationale || '[TO BE FILLED]'}\n`;
           }
