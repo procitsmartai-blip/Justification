@@ -887,14 +887,11 @@ function gen() {
   let o = '';
 
   // ── Header ──────────────────────────────────────────────────────────────
-  o += D2+'\n';
-  o += ctr('TENDER AWARD JUSTIFICATION')+'\n';
-  o += ctr('Date: '+now)+'\n';
-  o += D2+'\n';
+
 
   // ── 1. Background ────────────────────────────────────────────────────────
   const need=v('bg_need'), oa=v('bg_oa');
-  o += '\n1.  BACKGROUND & RATIONALE\n'+D1+'\n';
+  o += '\n1.  BACKGROUND & RATIONALE\n';
   if (need) o += '  Operational Need:\n'+wrap(need)+'\n\n';
   if (oa)   o += '  Previous OA / PO Reference:\n'+wrap(oa)+'\n\n';
 
@@ -906,24 +903,22 @@ function gen() {
     const caVsMarket = c.marketPriceIDR - totalWinnerSpendIDR;
     const caVsBasePct   = c.totalBaseIDR   ? caVsBase/c.totalBaseIDR   : 0;
     const caVsMarketPct = c.marketPriceIDR ? caVsMarket/c.marketPriceIDR : 0;
-    const winnerNames = Object.keys(winners).join(', ');
-    const bidderList  = d.vendors.map((vv,i)=>`\n      ${i+1}. ${vv.name}`).join('');
+    const winnerSet   = new Set(Object.keys(winners));
+    const bidderList  = d.vendors.map((vv,i)=>`\n      ${i+1}. ${vv.name}${winnerSet.has(vv.name)?'   ✓ WINNER':''}`).join('');
 
-    o += '\n'+D1+'\n2.  AWARD SUMMARY\n'+D1+'\n\n';
-    o += `  ${'Bidders List'.padEnd(kw)}: ${bidderList}\n`;
-    o += kv('Awarded To',                       winnerNames,                   kw);
+    o += '\n2.  AWARD SUMMARY\n\n';
+    o += `  ${'Bidders List'.padEnd(kw)}: ${bidderList}\n\n`;
     o += kv('Total Awarded Spend',              idr(totalWinnerSpendIDR),      kw);
-    o += kv('Total Base Price (all items)',      idr(c.totalBaseIDR),           kw);
-    o += kv('Average Market Price (all vendors)',`${idr(c.marketPriceIDR)}  (${d.vendors.length} vendor avg)`, kw);
-    o += kv('Total Spend vs Base Price',         `${idr(totalWinnerSpendIDR)}  vs  ${idr(c.totalBaseIDR)}  →  ${caVsBase>=0?'savings':'over'} ${idr(Math.abs(caVsBase))}  (${Math.abs(caVsBasePct*100).toFixed(1)}%)`, kw);
-    o += kv('Total Spend vs Market Price',       `${idr(totalWinnerSpendIDR)}  vs  ${idr(c.marketPriceIDR)}  →  ${caVsMarket>=0?'savings':'over'} ${idr(Math.abs(caVsMarket))}  (${Math.abs(caVsMarketPct*100).toFixed(1)}%)`, kw);
+    o += kv('Total Base Price',                  `${idr(c.totalBaseIDR)}  →  ${caVsBase>=0?'savings':'over'} ${idr(Math.abs(caVsBase))}  (${Math.abs(caVsBasePct*100).toFixed(1)}%)`, kw);
+    o += kv('Average Market Price',              `${idr(c.marketPriceIDR)}  →  ${caVsMarket>=0?'savings':'over'} ${idr(Math.abs(caVsMarket))}  (${Math.abs(caVsMarketPct*100).toFixed(1)}%)  (${d.vendors.length} vendor avg)`, kw);
     // Total vs Last Price (aggregate across all winner items)
     if (lastPriceMap) {
       let totalLP=0, lpOk=true;
       Object.values(winners).forEach(vd=>{ vd.items.forEach(wi=>{ const itObj=d.items.find(x=>x.name===wi.itemName); const lpr=itObj?getLastPrice(itObj):null; if(lpr&&lpr.lastPrice) totalLP+=lpr.lastPrice*wi.qty; else lpOk=false; }); });
-      if (totalLP>0) { const ld=(totalWinnerSpendIDR-totalLP)/totalLP; o += kv('Total Spend vs Last Price', `${idr(totalWinnerSpendIDR)}  vs  ${idr(totalLP)}  →  ${ld>=0?'↑':'↓'}${Math.abs(ld*100).toFixed(1)}% vs LP${!lpOk?' (partial coverage)':''}`, kw); }
+      if (totalLP>0) { const ld=(totalWinnerSpendIDR-totalLP)/totalLP; o += kv('Last Price (aggregate)', `${idr(totalLP)}  →  ${ld>=0?'↑':'↓'}${Math.abs(ld*100).toFixed(1)}% vs LP${!lpOk?' (partial coverage)':''}`, kw); }
     }
     o += '\n';
+
 
     // Per-winner breakdown
     Object.entries(winners).forEach(([vName,vData],wi)=>{
@@ -934,12 +929,12 @@ function gen() {
       if (ltst2.leadTime)    o += kv('    Lead Time',     ltst2.leadTime + (ltst2.ltConsistent ? ' days' : ' days (varies)'), kw);
       if (ltst2.shippingTerm)o += kv('    Incoterm',      ltst2.shippingTerm + (ltst2.stConsistent ? '' : ' (varies)'), kw);
       if (vData.payment)  o += kv('    Payment Term',  vData.payment,  kw);
-      o += kv('    Total Spend vs Base Price',  `${idr(vData.totalSpendIDR)}  vs  ${idr(m.baseTotal)}  →  ${m.savingsVsBase>=0?'savings':'over'} ${idr(Math.abs(m.savingsVsBase))}  (${Math.abs(m.basePct*100).toFixed(1)}%)`, kw);
-      o += kv('    Total Spend vs Market Price',`${idr(vData.totalSpendIDR)}  vs  ${idr(m.marketTotal)}  →  ${m.savingsVsMarket>=0?'savings':'over'} ${idr(Math.abs(m.savingsVsMarket))}  (${Math.abs(m.marketPct*100).toFixed(1)}%)`, kw);
+      o += kv('    Base Price',  `${idr(m.baseTotal)}  →  ${m.savingsVsBase>=0?'savings':'over'} ${idr(Math.abs(m.savingsVsBase))}  (${Math.abs(m.basePct*100).toFixed(1)}%)`, kw);
+      o += kv('    Market Price',`${idr(m.marketTotal)}  →  ${m.savingsVsMarket>=0?'savings':'over'} ${idr(Math.abs(m.savingsVsMarket))}  (${Math.abs(m.marketPct*100).toFixed(1)}%)`, kw);
       if (lastPriceMap) {
         let vLP=0, vLPOk=true;
         vData.items.forEach(wi=>{ const itObj=excelData.items.find(x=>x.name===wi.itemName); const lpr=itObj?getLastPrice(itObj):null; if(lpr&&lpr.lastPrice) vLP+=lpr.lastPrice*wi.qty; else vLPOk=false; });
-        if (vLP>0) { const ld=(vData.totalSpendIDR-vLP)/vLP; o += kv('    Total Spend vs Last Price',`${idr(vData.totalSpendIDR)}  vs  ${idr(vLP)}  →  ${ld>=0?'↑':'↓'}${Math.abs(ld*100).toFixed(1)}% vs LP${!vLPOk?' (partial)':''}`, kw); }
+        if (vLP>0) { const ld=(vData.totalSpendIDR-vLP)/vLP; o += kv('    Last Price',`${idr(vLP)}  →  ${ld>=0?'↑':'↓'}${Math.abs(ld*100).toFixed(1)}% vs LP${!vLPOk?' (partial)':''}`, kw); }
       }
       o += '\n';
     });
@@ -947,14 +942,14 @@ function gen() {
 
   // ── 3. Justification & Special Conditions ────────────────────────────────
   const why=v('j_why'), pen=v('j_pen');
-  o += D1+'\n3.  JUSTIFICATION & SPECIAL CONDITIONS\n'+D1+'\n';
+  o += '3.  JUSTIFICATION & SPECIAL CONDITIONS\n';
   if (why) o += '  Award Rationale:\n'+wrap(why)+'\n\n';
   if (pen) o += '  Penalty / Quality Clauses:\n'+wrap(pen)+'\n';
   if (!why && !pen) o += '\n  [TO BE FILLED: Award rationale and special conditions]\n';
   o += '\n';
 
   // ── 4. Vendor Comparison & Award ─────────────────────────────────────────
-  o += D1+'\n4.  VENDOR COMPARISON & AWARD\n'+D1+'\n\n';
+  o += '4.  VENDOR COMPARISON & AWARD\n\n';
   if (excelData) {
     const d=excelData;
     d.vendors.forEach((vv,i)=>{
@@ -966,14 +961,25 @@ function gen() {
         vData.items.forEach((it,j)=>{
           const idPfx = it.itemId    ? `[${it.itemId}] ` : '';
           const pnSfx = it.partNumber ? ` [PN: ${it.partNumber}]` : '';
-          o += `      ${j+1}. ${idPfx}${it.itemName}${pnSfx}  —  qty ${num(it.qty)} ${it.uom}  @  ${idrOrig(it.bidPriceIDR,it.bidPrice,it.currency)}/unit  =  ${idr(it.spendIDR)}\n`;
-          if (lastPriceMap) {
-            const itObj2 = excelData.items.find(x=>x.name===it.itemName);
-            const lpr2   = itObj2 ? getLastPrice(itObj2) : null;
-            if (lpr2 && lpr2.lastPrice && it.bidPriceIDR) {
-              const ld2 = (it.bidPriceIDR - lpr2.lastPrice) / lpr2.lastPrice;
-              o += `         ${ld2>=0?'↑':'↓'}${Math.abs(ld2*100).toFixed(1)}% vs LP  (last: ${idr(lpr2.lastPrice)}/unit)\n`;
+          o += `      ${j+1}. ${it.itemName}${pnSfx}  —  qty ${num(it.qty)} ${it.uom}  @  ${idrOrig(it.bidPriceIDR,it.bidPrice,it.currency)}/unit\n`;
+          const itObj2   = excelData.items.find(x=>x.name===it.itemName);
+          // Delta vs Base Price (always shown)
+          if (itObj2 && itObj2.basePriceIDR && it.bidPriceIDR) {
+            const db = (it.bidPriceIDR - itObj2.basePriceIDR) / itObj2.basePriceIDR;
+            const mktPrices = excelData.vendors.map(vv=>{ const x=vv.items.find(y=>y.itemName===it.itemName); return x?x.bidPriceIDR:0; }).filter(p=>p>0);
+            const mktAvg    = mktPrices.length ? mktPrices.reduce((a,b)=>a+b,0)/mktPrices.length : 0;
+            const dm        = mktAvg ? (it.bidPriceIDR - mktAvg) / mktAvg : null;
+            let deltaLine   = `         ${db>=0?'↑':'↓'}${Math.abs(db*100).toFixed(1)}% vs Base  (base: ${idr(itObj2.basePriceIDR)}/unit)`;
+            if (dm !== null) deltaLine += `\n         ${dm>=0?'↑':'↓'}${Math.abs(dm*100).toFixed(1)}% vs Market  (mkt: ${idr(mktAvg)}/unit)`;
+            // Delta vs Last Price (only when LP file loaded)
+            if (lastPriceMap) {
+              const lpr2 = getLastPrice(itObj2);
+              if (lpr2 && lpr2.lastPrice) {
+                const dl = (it.bidPriceIDR - lpr2.lastPrice) / lpr2.lastPrice;
+                deltaLine += `  ·  ${dl>=0?'↑':'↓'}${Math.abs(dl*100).toFixed(1)}% vs LP  (last: ${idr(lpr2.lastPrice)}/unit)`;
+              }
             }
+            o += deltaLine + '\n';
           }
           if (!it.isLowest) {
             o += `         ⚠ Non-lowest bid for this item — Rationale: ${it.rationale || '[TO BE FILLED]'}\n`;
@@ -999,9 +1005,7 @@ function gen() {
   }
 
   // ── Footer ───────────────────────────────────────────────────────────────
-  o += '\n'+D2+'\n';
-  o += ctr('[End of Justification Document]')+'\n';
-  o += D2+'\n';
+
 
   document.getElementById('outArea').textContent=o;
   document.getElementById('outArea').style.display='block';
