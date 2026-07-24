@@ -976,7 +976,8 @@ function gen() {
               const lpr2 = getLastPrice(itObj2);
               if (lpr2 && lpr2.lastPrice) {
                 const dl = (it.bidPriceIDR - lpr2.lastPrice) / lpr2.lastPrice;
-                deltaLine += `  ·  ${dl>=0?'↑':'↓'}${Math.abs(dl*100).toFixed(1)}% vs LP  (last: ${idr(lpr2.lastPrice)}/unit)`;
+                const lpRef = [lpr2.poRef, lpr2.date].filter(Boolean).join(', ');
+                deltaLine += `\n         ${dl>=0?'↑':'↓'}${Math.abs(dl*100).toFixed(1)}% vs LP  (last: ${idr(lpr2.lastPrice)}/unit${lpRef?', '+lpRef:''})`;
               }
             }
             o += deltaLine + '\n';
