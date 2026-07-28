@@ -514,11 +514,44 @@ function parseExcel(data) {
   // Guard: reject Summary sheet (pivot layout, wrong structure)
   if (sItems.toLowerCase().includes('summary')) return null;
 
+  // Build a header-name → column-index map from row 3 (0-indexed) of a sheet.
+  // Protects against platform export column drift between tender events.
+  const headerMap = sheetName => {
+    const raw = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], {header:1, defval:null});
+    const hdrRow = raw[2] || [];
+    const map = {};
+    hdrRow.forEach((h,i) => {
+      if (!h) return;
+      const clean = String(h).replace(/\s*\([^)]*\)\s*$/,'').trim().toLowerCase(); // strip trailing "(Text)" etc.
+      if (!(clean in map)) map[clean] = i; // first match wins
+    });
+    return map;
+  };
+  const col = (map, ...names) => { for (const n of names) { const k=n.toLowerCase(); if (k in map) return map[k]; } return -1; };
+  const val = (row, idx) => idx>=0 ? row[idx] : null;
+
   const rows = s => XLSX.utils.sheet_to_json(wb.Sheets[s], {header:1, defval:null}).slice(3).filter(r=>r&&r[2]);
 
-  // Items and Services — original currencies
-  // col indices (0-based): 2=supplier, 8=itemName, 13=qty, 14=uom, 15=basePrice, 16=baseCur, 24=bidPrice, 25=bidCur
+  // Items and Services — original currencies. Columns resolved dynamically by header name.
   const itemsRows = rows(sItems);
+  const iHdr = headerMap(sItems);
+  const C = {
+    supplier: col(iHdr,'supplier name'),
+    itemId:   col(iHdr,'item id'),
+    itemDesc: col(iHdr,'item description'),
+    qty:      col(iHdr,'expected quantity'),      // note: appears twice in header; first match = col 9, but qty for pricing uses the later "Expected Quantity (Number)" — resolved below with fallback
+    bidPrice: col(iHdr,'unit bid price'),
+    bidCur:   col(iHdr,'bid price currency'),
+    leadTime: col(iHdr,'lead time'),
+    partNum:  col(iHdr,'item part number'),
+    shipTerm: col(iHdr,'shipping term'),
+  };
+  // "Expected Quantity" appears twice (Integer summary + Number per-response) — prefer the later numeric one used alongside Unit Bid Price
+  const qtyIdxCandidates = itemsRows.length ? Object.keys(iHdr).length : 0;
+  const expectedQtyIdxs = [];
+  { const raw = XLSX.utils.sheet_to_json(wb.Sheets[sItems], {header:1, defval:null}); const hdrRow = raw[2]||[];
+    hdrRow.forEach((h,i)=>{ if (h && String(h).toLowerCase().startsWith('expected quantity')) expectedQtyIdxs.push(i); }); }
+  const qtyIdx = expectedQtyIdxs.length ? expectedQtyIdxs[expectedQtyIdxs.length-1] : C.qty;
 
   // Item Savings — IDR normalized
   // col indices: 2=supplier, 8=itemName, 11=qty, 12=uom, 13=basePriceIDR, 14=bidPriceIDR
@@ -545,15 +578,15 @@ function parseExcel(data) {
   // Build vendors from items sheet (original currency per item)
   const vendorsMap = {};
   itemsRows.forEach(r => {
-    const supplier    = String(r[2]||'').trim();
-    const itemName    = String(r[8]||'');
-    const qty         = Number(r[13])||0;
-    const bidPrice    = Number(r[24])||0;
-    const currency    = String(r[25]||'IDR').trim();
-    const leadTime    = r[26]!=null ? String(r[26]).trim() : '';
-    const partNumber  = r[27]!=null ? String(r[27]).trim() : '';
-    const shippingTerm= r[29]!=null ? String(r[29]).trim() : '';
-    const itemId      = r[7] !=null ? String(r[7]).trim()  : '';
+    const supplier    = String(val(r,C.supplier)||'').trim();
+    const itemName    = String(val(r,C.itemDesc)||'');
+    const qty         = Number(val(r,qtyIdx))||0;
+    const bidPrice    = Number(val(r,C.bidPrice))||0;
+    const currency    = String(val(r,C.bidCur)||'IDR').trim();
+    const leadTime    = val(r,C.leadTime)!=null ? String(val(r,C.leadTime)).trim() : '';
+    const partNumber  = val(r,C.partNum)!=null ? String(val(r,C.partNum)).trim() : '';
+    const shippingTerm= val(r,C.shipTerm)!=null ? String(val(r,C.shipTerm)).trim() : '';
+    const itemId      = val(r,C.itemId)!=null ? String(val(r,C.itemId)).trim() : '';
     const idr         = idrLookup[`${supplier}::${itemName}`] || {basePriceIDR:0, bidPriceIDR:0};
     // Backfill itemId onto itemsMap (buyer-side, same across vendors)
     if (itemsMap[itemName] && itemId && !itemsMap[itemName].itemId) itemsMap[itemName].itemId = itemId;
@@ -966,8 +999,8 @@ function gen() {
       o += `  Winner ${wi+1}: ${vName}\n`;
       const ltst2 = vendorLTST(vData);
       o += kv('    Total Awarded Spend',        idr(vData.totalSpendIDR), kw);
-      if (ltst2.leadTime)    o += kv('    Lead Time',     ltst2.leadTime + (ltst2.ltConsistent ? ' days' : ' days (varies)'), kw);
-      if (ltst2.shippingTerm)o += kv('    Incoterm',      ltst2.shippingTerm + (ltst2.stConsistent ? '' : ' (varies)'), kw);
+      if (ltst2.leadTime)  o += kv('    Lead Time', ltst2.leadTime + (ltst2.ltConsistent ? ' days' : ' days (varies)'), kw);
+      if (vData.incoterm) o += kv('    Incoterm',   vData.incoterm, kw);
       if (vData.payment)  o += kv('    Payment Term',  vData.payment,  kw);
       o += kv('    Base Price',  `${idr(m.baseTotal)}  →  ${m.savingsVsBase>=0?'savings':'over'} ${idr(Math.abs(m.savingsVsBase))}  (${Math.abs(m.basePct*100).toFixed(1)}%)`, kw);
       o += kv('    Market Price',`${idr(m.marketTotal)}  →  ${m.savingsVsMarket>=0?'savings':'over'} ${idr(Math.abs(m.savingsVsMarket))}  (${Math.abs(m.marketPct*100).toFixed(1)}%)`, kw);
