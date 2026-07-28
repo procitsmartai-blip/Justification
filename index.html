@@ -179,7 +179,13 @@ tr:last-child td{border-bottom:none;}
   <div class="section-head"><div class="sn">3</div><div class="st">Justification &amp; Special Conditions</div><div class="sd">Narrative &amp; PO terms</div></div>
   <div class="section-body">
     <div class="fr">
-      <div class="fg"><label class="fl">Award Rationale (3 points recommended)</label>
+      <div class="fg">
+        <label class="fl">Justification Rationale</label>
+        <div id="prefixChecks" style="display:flex;flex-direction:column;gap:7px;margin-top:4px;padding:12px 14px;background:var(--bg);border:1px solid var(--border);border-radius:8px"></div>
+      </div>
+    </div>
+    <div class="fr">
+      <div class="fg"><label class="fl">Other rationale</label>
         <textarea id="j_why" rows="3" placeholder="1. Single source for March — all alternatives unavailable or non-compliant&#10;2. Quality meets Smart Marunda standard specification&#10;3. Price 7% below ICI index — IDR 120,970/MT saving"></textarea>
       </div>
     </div>
@@ -284,6 +290,31 @@ function showToast(msg, isErr=false) {
 let excelData   = null;
 let lastPriceMap = null;   // key: 'id::ItemID' or 'desc::lowercase_desc' → {lastPrice, poRef, date, notes}
 let declinedVendors = [];  // manual list — vendor names disqualified/declined, shown in Bidders List output
+
+// ── Pre-fix Statements (Section 3) ───────────────────────────────────────────
+const PREFIX_OPTIONS = [
+  'Harga dan spek pada baseprice sesuai dengan last PO',
+  'Harga pada baseprice merupakan value PR',
+  'Harga pada baseprice merupakan average market price',
+  'Terpilih Winner dengan harga yang paling kompetitif',
+  'Bidding manual sementara karena OA sedang exceeded',
+  'Self Bidding by vendor',
+  'Vendor Winner merupakan authorized distributor brand',
+];
+
+function renderPrefixChecks() {
+  const el = document.getElementById('prefixChecks');
+  if (!el) return;
+  el.innerHTML = PREFIX_OPTIONS.map((label,i) => `
+    <label style="display:flex;align-items:flex-start;gap:8px;font-size:12px;font-weight:500;cursor:pointer;line-height:1.4">
+      <input type="checkbox" id="pf_${i}" style="width:14px;height:14px;margin-top:2px;cursor:pointer;flex-shrink:0">
+      <span>${label}</span>
+    </label>`).join('');
+}
+
+function getCheckedPrefixStatements() {
+  return PREFIX_OPTIONS.filter((_,i) => document.getElementById(`pf_${i}`)?.checked);
+}
 
 // ── Declined Vendor handlers ─────────────────────────────────────────────────
 function addDeclinedVendor() {
@@ -962,7 +993,7 @@ function gen() {
 
   // ── 1. Background ────────────────────────────────────────────────────────
   const need=v('bg_need'), oa=v('bg_oa');
-  o += '\n1.  BACKGROUND & RATIONALE\n';
+  o += '\n1.BACKGROUND & RATIONALE\n';
   if (need) o += '  Operational Need:\n'+wrap(need)+'\n\n';
   if (oa)   o += '  Previous OA / PO Reference:\n'+wrap(oa)+'\n\n';
 
@@ -979,7 +1010,7 @@ function gen() {
     declinedVendors.forEach((name,j)=>{ bidderLines.push(`\n      ${d.vendors.length+j+1}. ${name}   [Declined]`); });
     const bidderList  = bidderLines.join('');
 
-    o += '\n2.  AWARD SUMMARY\n\n';
+    o += '\n2.AWARD SUMMARY\n';
     o += `  ${'Bidders List'.padEnd(kw)}: ${bidderList}\n\n`;
     o += kv('Total Awarded Spend',              idr(totalWinnerSpendIDR),      kw);
     o += kv('Total Base Price',                  `${idr(c.totalBaseIDR)}  →  ${caVsBase>=0?'savings':'over'} ${idr(Math.abs(caVsBase))}  (${Math.abs(caVsBasePct*100).toFixed(1)}%)`, kw);
@@ -1015,14 +1046,17 @@ function gen() {
 
   // ── 3. Justification & Special Conditions ────────────────────────────────
   const why=v('j_why'), pen=v('j_pen');
-  o += '3.  JUSTIFICATION & SPECIAL CONDITIONS\n';
-  if (why) o += '  Award Rationale:\n'+wrap(why)+'\n\n';
+  const prefixStmts = getCheckedPrefixStatements();
+  const whyLines = why ? why.split('\n').map(l=>l.trim()).filter(Boolean) : [];
+  const allBullets = [...prefixStmts, ...whyLines];
+  o += '3.JUSTIFICATION & SPECIAL CONDITIONS\n';
+  if (allBullets.length) o += allBullets.map(s=>`  • ${s}\n`).join('') + '\n';
   if (pen) o += '  Penalty / Quality Clauses:\n'+wrap(pen)+'\n';
-  if (!why && !pen) o += '\n  [TO BE FILLED: Award rationale and special conditions]\n';
+  if (!allBullets.length && !pen) o += '\n  [TO BE FILLED: Award rationale and special conditions]\n';
   o += '\n';
 
   // ── 4. Vendor Comparison & Award ─────────────────────────────────────────
-  o += '4.  VENDOR COMPARISON & AWARD\n\n';
+  o += '4.VENDOR COMPARISON & AWARD\n';
   if (excelData) {
     const d=excelData;
     d.vendors.forEach((vv,i)=>{
@@ -1112,6 +1146,7 @@ function clearForm() {
   clearExcel();
   declinedVendors = [];
   renderDeclinedList();
+  PREFIX_OPTIONS.forEach((_,i)=>{const el=document.getElementById(`pf_${i}`);if(el)el.checked=false;});
   document.getElementById('outArea').style.display='none';
   document.getElementById('outPh').style.display='block';
   document.getElementById('copyCta').style.display='none';
@@ -1120,6 +1155,7 @@ function clearForm() {
 // ── INIT ────────────────────────────────────────────────────────────────────
 updSum();
 renderDeclinedList();
+renderPrefixChecks();
 </script>
 </body>
 </html>
