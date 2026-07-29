@@ -97,6 +97,12 @@ tr:last-child td{border-bottom:none;}
 .ra{animation:fi .18s ease;}
 @keyframes fi{from{opacity:0;transform:translateY(-4px);}to{opacity:1;transform:translateY(0);}}
 ::-webkit-scrollbar{width:5px;height:5px;}::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
+.toggle-switch{position:relative;display:inline-block;width:36px;height:20px;flex-shrink:0;}
+.toggle-switch input{opacity:0;width:0;height:0;}
+.toggle-slider{position:absolute;cursor:pointer;top:0;left:0;right:0;bottom:0;background:var(--border);transition:.2s;border-radius:20px;}
+.toggle-slider:before{content:"";position:absolute;height:14px;width:14px;left:3px;bottom:3px;background:#fff;transition:.2s;border-radius:50%;}
+.toggle-switch input:checked + .toggle-slider{background:var(--accent);}
+.toggle-switch input:checked + .toggle-slider:before{transform:translateX(16px);}
 .toast{position:fixed;bottom:18px;right:18px;z-index:999;background:var(--green);color:#fff;padding:9px 16px;border-radius:7px;font-size:12px;font-weight:600;opacity:0;transform:translateY(5px);transition:all .2s;pointer-events:none;}
 .toast.show{opacity:1;transform:translateY(0);}
 </style>
@@ -145,6 +151,15 @@ tr:last-child td{border-bottom:none;}
       <div class="upload-zone-title">Drop Excel file here or click to browse</div>
       <div class="upload-zone-sub">Accepts .xlsx — platform export format</div>
       <input type="file" id="xlFile" accept=".xlsx,.xls" style="display:none" onchange="handleFile(this)">
+    </div>
+
+    <!-- Market Price toggle — controls whether Market Price comparisons appear in generated output -->
+    <div style="margin-top:10px;padding:10px 14px;background:var(--bg);border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;justify-content:space-between;gap:8px">
+      <span style="font-size:11px;font-weight:600;color:var(--muted)">Include Market Price Comparison in Output</span>
+      <label class="toggle-switch">
+        <input type="checkbox" id="toggleMarketPrice" checked onchange="updSum()">
+        <span class="toggle-slider"></span>
+      </label>
     </div>
 
     <!-- Last Price upload bar — always visible -->
@@ -290,6 +305,51 @@ function showToast(msg, isErr=false) {
 let excelData   = null;
 let lastPriceMap = null;   // key: 'id::ItemID' or 'desc::lowercase_desc' → {lastPrice, poRef, date, notes}
 let declinedVendors = [];  // manual list — vendor names disqualified/declined, shown in Bidders List output
+
+const escAttr = s => String(s??'').replace(/"/g,'&quot;');
+function marketOn() { const el=document.getElementById('toggleMarketPrice'); return el ? el.checked : true; }
+
+// Format a date string to MM/YY for generated output. Accepts MM/YYYY, YYYY-MM(-DD), or MM/YY; falls back to original text.
+function toMMYY(dateStr) {
+  if (!dateStr) return '';
+  const s = String(dateStr).trim();
+  let m = s.match(/^(\d{1,2})\/(\d{4})$/);
+  if (m) return `${m[1].padStart(2,'0')}/${m[2].slice(-2)}`;
+  m = s.match(/^(\d{4})-(\d{1,2})(?:-\d{1,2})?$/);
+  if (m) return `${m[2].padStart(2,'0')}/${m[1].slice(-2)}`;
+  m = s.match(/^(\d{1,2})\/(\d{2})$/);
+  if (m) return `${m[1].padStart(2,'0')}/${m[2]}`;
+  return s;
+}
+
+// Bulk-select a single vendor as sole winner across all items (full expected qty).
+// Unchecking reverts only that vendor's own selections.
+function toggleSingleVendorWinner(vi, cb) {
+  if (!excelData) return;
+  excelData.items.forEach((it, ii) => {
+    const myVItem = excelData.vendors[vi].items.find(x=>x.itemName===it.name);
+    const myValid = myVItem && myVItem.bidPrice>0 && myVItem.bidPriceIDR>0;
+    if (cb.checked) {
+      excelData.vendors.forEach((vv, vvi) => {
+        if (vvi === vi) return;
+        const oCb  = document.getElementById(`w_${ii}_${vvi}`);
+        const oQty = document.getElementById(`qty_${ii}_${vvi}`);
+        if (oCb?.checked) { oCb.checked = false; if (oQty) { oQty.style.display='none'; oQty.value=''; } checkFlag(ii,vvi); }
+      });
+      const myCb  = document.getElementById(`w_${ii}_${vi}`);
+      const myQty = document.getElementById(`qty_${ii}_${vi}`);
+      if (myCb && myValid) { myCb.checked = true; if (myQty) { myQty.style.display='inline-block'; myQty.value = it.qty; } }
+      checkFlag(ii, vi);
+    } else {
+      const myCb  = document.getElementById(`w_${ii}_${vi}`);
+      const myQty = document.getElementById(`qty_${ii}_${vi}`);
+      if (myCb?.checked) { myCb.checked = false; if (myQty) { myQty.style.display='none'; myQty.value=''; } checkFlag(ii, vi); }
+    }
+    updateAssigned(ii);
+  });
+  updateVendorTerms();
+  updSum();
+}
 
 // ── Pre-fix Statements (Section 3) ───────────────────────────────────────────
 const PREFIX_OPTIONS = [
@@ -758,6 +818,18 @@ function renderPreview() {
       <button class="btn btn-s btn-sm btn-danger" onclick="clearExcel()">✕ Remove</button>
     </div>
     ${tableHtml}
+    <div style="margin-bottom:14px;padding:12px 14px;background:#EBF0FF;border:1px solid #C0CFFF;border-radius:8px">
+      <div style="font-weight:700;font-size:12px;color:var(--accent);margin-bottom:8px">⚡ Quick Action — Single Vendor Winner</div>
+      <div style="display:flex;flex-direction:column;gap:6px">
+        ${d.vendors.map((v,vi)=>{
+          const hasZero = v.items.some(vit=>!(vit.bidPrice>0)||!(vit.bidPriceIDR>0));
+          return `<label style="display:flex;align-items:center;gap:8px;font-size:12px;font-weight:600;cursor:${hasZero?'not-allowed':'pointer'};${hasZero?'opacity:0.5':''}">
+            <input type="checkbox" id="svw_${vi}" onchange="toggleSingleVendorWinner(${vi},this)" ${hasZero?'disabled title="This vendor has one or more items with no valid quote (price = 0) — cannot be sole winner"':''} style="width:14px;height:14px;cursor:${hasZero?'not-allowed':'pointer'}">
+            ${v.name}${hasZero?' <span style="font-size:9px;color:var(--red)">(incomplete quote — some items priced at 0)</span>':''}
+          </label>`;
+        }).join('')}
+      </div>
+    </div>
     <div style="font-weight:700;font-size:12px;margin-bottom:10px;color:var(--text)">🏆 Select Winners per Item</div>
     ${winnerRows}
     ${termsHtml}`;
@@ -831,9 +903,11 @@ function updateVendorTerms() {
     const existingInc = document.getElementById(`inc_${sanitizeId(n)}`)?.value || '';
     const v = excelData?.vendors.find(vv=>vv.name===n);
     const autoInc = existingInc || (v?.items?.[0]?.shippingTerm || '');
+    const existingInc2 = document.getElementById(`inc2_${sanitizeId(n)}`)?.value || '';
     saved[n] = {
-      pay: document.getElementById(`pay_${sanitizeId(n)}`)?.value || '',
-      inc: autoInc
+      pay:  document.getElementById(`pay_${sanitizeId(n)}`)?.value || '',
+      inc:  autoInc,
+      inc2: existingInc2
     };
   });
   container.innerHTML = winners.map(vName => `
@@ -846,6 +920,10 @@ function updateVendorTerms() {
       <div class="fg" style="flex:1;min-width:120px">
         <label class="fl">Incoterm</label>
         <input type="text" id="inc_${sanitizeId(vName)}" placeholder="e.g. FCO" value="${saved[vName]?.inc||''}" oninput="updSum()">
+      </div>
+      <div class="fg" style="flex:1;min-width:120px">
+        <label class="fl">Incoterm 2</label>
+        <input type="text" id="inc2_${sanitizeId(vName)}" placeholder="e.g. DDP" value="${saved[vName]?.inc2||''}" oninput="updSum()">
       </div>
     </div>`).join('');
 }
@@ -880,8 +958,9 @@ function getWinnerData() {
       if (!result[v.name]) {
         result[v.name] = {
           items:[], totalSpendIDR:0,
-          payment:  document.getElementById(`pay_${sanitizeId(v.name)}`)?.value||'',
-          incoterm: document.getElementById(`inc_${sanitizeId(v.name)}`)?.value||''
+          payment:   document.getElementById(`pay_${sanitizeId(v.name)}`)?.value||'',
+          incoterm:  document.getElementById(`inc_${sanitizeId(v.name)}`)?.value||'',
+          incoterm2: document.getElementById(`inc2_${sanitizeId(v.name)}`)?.value||''
         };
       }
       const spendIDR = vItem.bidPriceIDR * awardedQty;
@@ -1014,7 +1093,7 @@ function gen() {
     o += `  ${'Bidders List'.padEnd(kw)}: ${bidderList}\n\n`;
     o += kv('Total Awarded Spend',              idr(totalWinnerSpendIDR),      kw);
     o += kv('Total Base Price',                  `${idr(c.totalBaseIDR)}  →  ${caVsBase>=0?'savings':'over'} ${idr(Math.abs(caVsBase))}  (${Math.abs(caVsBasePct*100).toFixed(1)}%)`, kw);
-    o += kv('Average Market Price',              `${idr(c.marketPriceIDR)}  →  ${caVsMarket>=0?'savings':'over'} ${idr(Math.abs(caVsMarket))}  (${Math.abs(caVsMarketPct*100).toFixed(1)}%)  (${d.vendors.length} vendor avg)`, kw);
+    if (marketOn()) o += kv('Average Market Price', `${idr(c.marketPriceIDR)}  →  ${caVsMarket>=0?'savings':'over'} ${idr(Math.abs(caVsMarket))}  (${Math.abs(caVsMarketPct*100).toFixed(1)}%)  (${d.vendors.length} vendor avg)`, kw);
     // Total vs Last Price (aggregate across all winner items)
     if (lastPriceMap) {
       let totalLP=0, lpOk=true;
@@ -1032,9 +1111,10 @@ function gen() {
       o += kv('    Total Awarded Spend',        idr(vData.totalSpendIDR), kw);
       if (ltst2.leadTime)  o += kv('    Lead Time', ltst2.leadTime + (ltst2.ltConsistent ? ' days' : ' days (varies)'), kw);
       if (vData.incoterm) o += kv('    Incoterm',   vData.incoterm, kw);
+      if (vData.incoterm2) o += kv('    Incoterm 2', vData.incoterm2, kw);
       if (vData.payment)  o += kv('    Payment Term',  vData.payment,  kw);
       o += kv('    Base Price',  `${idr(m.baseTotal)}  →  ${m.savingsVsBase>=0?'savings':'over'} ${idr(Math.abs(m.savingsVsBase))}  (${Math.abs(m.basePct*100).toFixed(1)}%)`, kw);
-      o += kv('    Market Price',`${idr(m.marketTotal)}  →  ${m.savingsVsMarket>=0?'savings':'over'} ${idr(Math.abs(m.savingsVsMarket))}  (${Math.abs(m.marketPct*100).toFixed(1)}%)`, kw);
+      if (marketOn()) o += kv('    Market Price',`${idr(m.marketTotal)}  →  ${m.savingsVsMarket>=0?'savings':'over'} ${idr(Math.abs(m.savingsVsMarket))}  (${Math.abs(m.marketPct*100).toFixed(1)}%)`, kw);
       if (lastPriceMap) {
         let vLP=0, vLPOk=true;
         vData.items.forEach(wi=>{ const itObj=excelData.items.find(x=>x.name===wi.itemName); const lpr=itObj?getLastPrice(itObj):null; if(lpr&&lpr.lastPrice) vLP+=lpr.lastPrice*wi.qty; else vLPOk=false; });
@@ -1073,17 +1153,19 @@ function gen() {
           // Delta vs Base Price (always shown)
           if (itObj2 && itObj2.basePriceIDR && it.bidPriceIDR) {
             const db = (it.bidPriceIDR - itObj2.basePriceIDR) / itObj2.basePriceIDR;
-            const mktPrices = excelData.vendors.map(vv=>{ const x=vv.items.find(y=>y.itemName===it.itemName); return x?x.bidPriceIDR:0; }).filter(p=>p>0);
-            const mktAvg    = mktPrices.length ? mktPrices.reduce((a,b)=>a+b,0)/mktPrices.length : 0;
-            const dm        = mktAvg ? (it.bidPriceIDR - mktAvg) / mktAvg : null;
             let deltaLine   = `         ${db>=0?'↑':'↓'}${Math.abs(db*100).toFixed(1)}% vs Base  (base: ${idr(itObj2.basePriceIDR)}/unit)`;
-            if (dm !== null) deltaLine += `\n         ${dm>=0?'↑':'↓'}${Math.abs(dm*100).toFixed(1)}% vs Market  (mkt: ${idr(mktAvg)}/unit)`;
+            if (marketOn()) {
+              const mktPrices = excelData.vendors.map(vv=>{ const x=vv.items.find(y=>y.itemName===it.itemName); return x?x.bidPriceIDR:0; }).filter(p=>p>0);
+              const mktAvg    = mktPrices.length ? mktPrices.reduce((a,b)=>a+b,0)/mktPrices.length : 0;
+              const dm        = mktAvg ? (it.bidPriceIDR - mktAvg) / mktAvg : null;
+              if (dm !== null) deltaLine += `\n         ${dm>=0?'↑':'↓'}${Math.abs(dm*100).toFixed(1)}% vs Market  (mkt: ${idr(mktAvg)}/unit)`;
+            }
             // Delta vs Last Price (only when LP file loaded)
             if (lastPriceMap) {
               const lpr2 = getLastPrice(itObj2);
               if (lpr2 && lpr2.lastPrice) {
                 const dl = (it.bidPriceIDR - lpr2.lastPrice) / lpr2.lastPrice;
-                const lpRef = [lpr2.poRef, lpr2.date].filter(Boolean).join(', ');
+                const lpRef = [lpr2.poRef, toMMYY(lpr2.date)].filter(Boolean).join(', ');
                 deltaLine += `\n         ${dl>=0?'↑':'↓'}${Math.abs(dl*100).toFixed(1)}% vs LP  (last: ${idr(lpr2.lastPrice)}/unit${lpRef?', '+lpRef:''})`;
               }
             }
