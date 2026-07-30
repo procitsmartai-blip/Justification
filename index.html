@@ -655,14 +655,25 @@ function parseExcel(data) {
     idrLookup[key] = { basePriceIDR: Number(r[13])||0, bidPriceIDR: Number(r[14])||0 };
   });
 
-  // Build unique items list (from savings sheet — normalized)
+  // Build unique items list (from savings sheet — normalized).
+  // Item ID resolution: many tenders embed the buyer's own material/SAP number as a prefix
+  // in the item description, e.g. "631394 | PUSH IN L-FITTING...". That embedded number is
+  // what buyers actually track (and what Last Price files key off), and is DIFFERENT from
+  // the platform's own internal "Item ID" column (an opaque platform reference, e.g. 647920).
+  // Prefer the embedded description number; fall back to the platform's Item ID only when
+  // no such prefix exists (e.g. tenders with plain descriptions like "Handle APAR Powder 6 Kg").
+  const extractItemId = (desc, platformId) => {
+    const m = String(desc||'').match(/^(\d+)\s*\|/);
+    return m ? m[1] : (platformId||'');
+  };
   const itemsMap = {};
   savingsRows.forEach(r => {
     const name = String(r[8]||'');
     if (!itemsMap[name]) {
       const qty = Number(r[11])||0;
       const basePriceIDR = Number(r[13])||0;
-      itemsMap[name] = { name, qty, uom: String(r[12]||''), basePriceIDR, baseTotalIDR: basePriceIDR * qty, itemId:'' };
+      const platformId = r[7]!=null ? String(r[7]).trim() : '';
+      itemsMap[name] = { name, qty, uom: String(r[12]||''), basePriceIDR, baseTotalIDR: basePriceIDR * qty, itemId: extractItemId(name, platformId) };
     }
   });
 
@@ -677,9 +688,9 @@ function parseExcel(data) {
     const leadTime    = val(r,C.leadTime)!=null ? String(val(r,C.leadTime)).trim() : '';
     const partNumber  = val(r,C.partNum)!=null ? String(val(r,C.partNum)).trim() : '';
     const shippingTerm= val(r,C.shipTerm)!=null ? String(val(r,C.shipTerm)).trim() : '';
-    const itemId      = val(r,C.itemId)!=null ? String(val(r,C.itemId)).trim() : '';
+    const itemId      = extractItemId(itemName, val(r,C.itemId)!=null ? String(val(r,C.itemId)).trim() : '');
     const idr         = idrLookup[`${supplier}::${itemName}`] || {basePriceIDR:0, bidPriceIDR:0};
-    // Backfill itemId onto itemsMap (buyer-side, same across vendors)
+    // Fallback backfill only (Item Savings' own itemId, set above, is preferred and already present in most cases)
     if (itemsMap[itemName] && itemId && !itemsMap[itemName].itemId) itemsMap[itemName].itemId = itemId;
     if (!vendorsMap[supplier]) vendorsMap[supplier] = { name:supplier, items:[], totalBidIDR:0 };
     vendorsMap[supplier].items.push({ itemName, qty, bidPrice, currency, bidPriceIDR:idr.bidPriceIDR, spendIDR:idr.bidPriceIDR*qty, leadTime, shippingTerm, partNumber, itemId });
