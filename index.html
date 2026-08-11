@@ -112,7 +112,7 @@ tr:last-child td{border-bottom:none;}
 <div class="topbar">
   <div class="logo">TENDER<span>JUST</span></div>
   <div class="topbar-right">
-    <button class="btn btn-s" onclick="clearForm()">↺ Clear</button>
+    <button class="btn btn-s" onclick="clearForm()">🗑 Clear All</button>
     <button class="btn btn-p" onclick="gen()">⚡ Generate</button>
   </div>
 </div>
@@ -739,7 +739,7 @@ function parseExcel(data) {
 // RENDER PREVIEW (Section 4) — comparison table + winner selection UI
 // ═══════════════════════════════════════════════════════════════════════════
 // ═══════════════════════════════════════════════════════════════════════════
-// EXCEL EXPORT — full item/vendor comparison (offered when tender has >10 items)
+// EXCEL EXPORT — full item/vendor comparison (offered when tender has >5 items)
 // ═══════════════════════════════════════════════════════════════════════════
 function exportComparisonExcel() {
   if (!excelData) return;
@@ -1106,7 +1106,7 @@ function updSum() {
       <div style="font-weight:700;font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">Winner ${wi+1}</div>
       <div style="font-weight:700;font-size:13px;color:var(--text);margin-bottom:8px">✓ ${vName}</div>
       <div class="sl">Items Awarded</div>
-      <div style="font-size:11px;color:var(--muted);margin-bottom:7px">${vData.items.length>10 ? `${vData.items.length} items` : vData.items.map(i=>i.itemName).join(', ')}</div>
+      <div style="font-size:11px;color:var(--muted);margin-bottom:7px">${vData.items.length>5 ? `${vData.items.length} items` : vData.items.map(i=>i.itemName).join(', ')}</div>
       <div class="sl">Total Awarded Spend (IDR)</div>
       <div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:6px">${idr(vData.totalSpendIDR)}</div>
       ${(()=>{const ls=vendorLTST(vData);return [ls.leadTime?`<span style="font-size:11px;margin-bottom:2px;display:block"><span style="font-weight:700;color:var(--muted)">Lead Time:</span> ${ls.leadTime}${ls.ltConsistent?' days':' days (varies)'}</span>`:'',ls.shippingTerm?`<span style="font-size:11px;margin-bottom:2px;display:block"><span style="font-weight:700;color:var(--muted)">Shipping:</span> ${ls.shippingTerm}${ls.stConsistent?'':' (varies)'}</span>`:''].join('');})()}
@@ -1226,7 +1226,7 @@ function gen() {
   o += '4.VENDOR COMPARISON & AWARD\n';
   if (excelData) {
     const d=excelData;
-    const isLargeTender = d.items.length > 10;
+    const isLargeTender = d.items.length > 5;
     d.vendors.forEach((vv,i)=>{
       const isW = !!winners[vv.name];
       if (isW) {
@@ -1293,7 +1293,7 @@ function gen() {
   document.getElementById('outArea').style.display='block';
   document.getElementById('outPh').style.display='none';
   document.getElementById('copyCta').style.display='flex';
-  document.getElementById('exportBtn').style.display = (excelData && excelData.items.length>10) ? 'inline-flex' : 'none';
+  document.getElementById('exportBtn').style.display = (excelData && excelData.items.length>5) ? 'inline-flex' : 'none';
   document.getElementById('outArea').scrollIntoView({behavior:'smooth',block:'start'});
 }
 
@@ -1324,6 +1324,14 @@ function clearForm() {
   if (!confirm('Clear everything?')) return;
   ['bg_need','bg_oa','j_why','j_pen'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
   clearExcel();
+  // Reset Last Price file state (previously left untouched by Clear)
+  lastPriceMap = null;
+  document.getElementById('lpFile').value = '';
+  document.getElementById('lpStatus').style.display = 'none';
+  document.getElementById('lpClear').style.display  = 'none';
+  // Reset Market Price toggle to default (on)
+  const mpToggle = document.getElementById('toggleMarketPrice');
+  if (mpToggle) mpToggle.checked = true;
   declinedVendors = [];
   renderDeclinedList();
   PREFIX_OPTIONS.forEach((_,i)=>{const el=document.getElementById(`pf_${i}`);if(el)el.checked=false;});
@@ -1331,6 +1339,7 @@ function clearForm() {
   document.getElementById('outPh').style.display='block';
   document.getElementById('copyCta').style.display='none';
   document.getElementById('exportBtn').style.display='none';
+  showToast('✓ Cleared — all files, inputs, and output reset');
 }
 
 // ── INIT ────────────────────────────────────────────────────────────────────
