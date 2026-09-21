@@ -328,7 +328,7 @@ function toMMYY(dateStr) {
 function toggleSingleVendorWinner(vi, cb) {
   if (!excelData) return;
   excelData.items.forEach((it, ii) => {
-    const myVItem = excelData.vendors[vi].items.find(x=>x.itemName===it.name);
+    const myVItem = excelData.vendors[vi].items.find(x=>x._uid===it._uid);
     const myValid = myVItem && myVItem.bidPrice>0 && myVItem.bidPriceIDR>0;
     if (cb.checked) {
       excelData.vendors.forEach((vv, vvi) => {
@@ -660,35 +660,48 @@ function parseExcel(data) {
   const qtyIdx = expectedQtyIdxs.length ? expectedQtyIdxs[expectedQtyIdxs.length-1] : C.qty;
 
   // Item Savings — IDR normalized
-  // col indices: 2=supplier, 8=itemName, 11=qty, 12=uom, 13=basePriceIDR, 14=bidPriceIDR
   const savingsRows = rows(sSavings);
 
-  // Build IDR lookup: key = `${supplier}::${itemName}`
+  // ── Unique item identity ────────────────────────────────────────────────
+  // Item DESCRIPTION is NOT reliable as a uniqueness key — tenders commonly have
+  // multiple distinct line items (different Item IDs, different quantities) that
+  // share the exact same description text (e.g. several "Yellow tape cloth 48mm"
+  // rows split by lot/quantity). The platform's own Item ID (col 7 in both Item
+  // Savings and Items and Services — confirmed 1:1 matching between the two
+  // sheets for the same row) is the only value guaranteed unique per line item,
+  // so it is used as the internal join key (_uid) everywhere below. Description
+  // remains purely a display field.
+  const platformIdOf = r => r[7]!=null ? String(r[7]).trim() : '';
+
+  // Build IDR lookup: key = `${supplier}::${platformId}` (falls back to description
+  // only if this row has no platform Item ID at all)
   const idrLookup = {};
   savingsRows.forEach(r => {
-    const key = `${String(r[2]||'').trim()}::${String(r[8]||'')}`;
+    const pid = platformIdOf(r) || String(r[8]||'');
+    const key = `${String(r[2]||'').trim()}::${pid}`;
     idrLookup[key] = { basePriceIDR: Number(r[13])||0, bidPriceIDR: Number(r[14])||0 };
   });
 
-  // Build unique items list (from savings sheet — normalized).
-  // Item ID resolution: many tenders embed the buyer's own material/SAP number as a prefix
-  // in the item description, e.g. "631394 | PUSH IN L-FITTING...". That embedded number is
-  // what buyers actually track (and what Last Price files key off), and is DIFFERENT from
-  // the platform's own internal "Item ID" column (an opaque platform reference, e.g. 647920).
-  // Prefer the embedded description number; fall back to the platform's Item ID only when
-  // no such prefix exists (e.g. tenders with plain descriptions like "Handle APAR Powder 6 Kg").
+  // Item ID resolution for DISPLAY / Last-Price matching: many tenders embed the buyer's
+  // own material/SAP number as a prefix in the item description, e.g.
+  // "631394 | PUSH IN L-FITTING...". That embedded number is what buyers actually track
+  // (and what Last Price files key off), different from the platform's own internal
+  // Item ID (an opaque platform reference). Prefer the embedded description number;
+  // fall back to the platform's Item ID only when no such prefix exists.
   const extractItemId = (desc, platformId) => {
     const m = String(desc||'').match(/^(\d+)\s*\|/);
     return m ? m[1] : (platformId||'');
   };
+
   const itemsMap = {};
   savingsRows.forEach(r => {
     const name = String(r[8]||'');
-    if (!itemsMap[name]) {
+    const platformId = platformIdOf(r);
+    const uid = platformId || name; // guaranteed-unique join key
+    if (!itemsMap[uid]) {
       const qty = Number(r[11])||0;
       const basePriceIDR = Number(r[13])||0;
-      const platformId = r[7]!=null ? String(r[7]).trim() : '';
-      itemsMap[name] = { name, qty, uom: String(r[12]||''), basePriceIDR, baseTotalIDR: basePriceIDR * qty, itemId: extractItemId(name, platformId) };
+      itemsMap[uid] = { _uid: uid, name, qty, uom: String(r[12]||''), basePriceIDR, baseTotalIDR: basePriceIDR * qty, itemId: extractItemId(name, platformId) };
     }
   });
 
@@ -697,18 +710,20 @@ function parseExcel(data) {
   itemsRows.forEach(r => {
     const supplier    = String(val(r,C.supplier)||'').trim();
     const itemName    = String(val(r,C.itemDesc)||'');
+    const platformId  = val(r,C.itemId)!=null ? String(val(r,C.itemId)).trim() : '';
+    const uid         = platformId || itemName; // must match itemsMap's key derivation
     const qty         = Number(val(r,qtyIdx))||0;
     const bidPrice    = Number(val(r,C.bidPrice))||0;
     const currency    = String(val(r,C.bidCur)||'IDR').trim();
     const leadTime    = val(r,C.leadTime)!=null ? String(val(r,C.leadTime)).trim() : '';
     const partNumber  = val(r,C.partNum)!=null ? String(val(r,C.partNum)).trim() : '';
     const shippingTerm= val(r,C.shipTerm)!=null ? String(val(r,C.shipTerm)).trim() : '';
-    const itemId      = extractItemId(itemName, val(r,C.itemId)!=null ? String(val(r,C.itemId)).trim() : '');
-    const idr         = idrLookup[`${supplier}::${itemName}`] || {basePriceIDR:0, bidPriceIDR:0};
+    const itemId      = extractItemId(itemName, platformId);
+    const idr         = idrLookup[`${supplier}::${uid}`] || {basePriceIDR:0, bidPriceIDR:0};
     // Fallback backfill only (Item Savings' own itemId, set above, is preferred and already present in most cases)
-    if (itemsMap[itemName] && itemId && !itemsMap[itemName].itemId) itemsMap[itemName].itemId = itemId;
+    if (itemsMap[uid] && itemId && !itemsMap[uid].itemId) itemsMap[uid].itemId = itemId;
     if (!vendorsMap[supplier]) vendorsMap[supplier] = { name:supplier, items:[], totalBidIDR:0 };
-    vendorsMap[supplier].items.push({ itemName, qty, bidPrice, currency, bidPriceIDR:idr.bidPriceIDR, spendIDR:idr.bidPriceIDR*qty, leadTime, shippingTerm, partNumber, itemId });
+    vendorsMap[supplier].items.push({ _uid:uid, itemName, qty, bidPrice, currency, bidPriceIDR:idr.bidPriceIDR, spendIDR:idr.bidPriceIDR*qty, leadTime, shippingTerm, partNumber, itemId });
   });
 
   const items = Object.values(itemsMap);
@@ -755,13 +770,13 @@ function exportComparisonExcel() {
   Object.values(winners).forEach(vd => vd.items.forEach(it => awardedItemNames.add(it.itemName)));
 
   d.items.forEach(itObj => {
-    const mktPrices = d.vendors.map(vv=>{ const x=vv.items.find(y=>y.itemName===itObj.name); return (x&&x.bidPriceIDR>0)?x.bidPriceIDR:0; }).filter(p=>p>0);
+    const mktPrices = d.vendors.map(vv=>{ const x=vv.items.find(y=>y._uid===itObj._uid); return (x&&x.bidPriceIDR>0)?x.bidPriceIDR:0; }).filter(p=>p>0);
     const mktAvg = mktPrices.length ? mktPrices.reduce((a,b)=>a+b,0)/mktPrices.length : 0;
     const lpr = getLastPrice(itObj);
 
     // Collect this item's winning line(s) across all vendors (handles split awards)
     const winnerLines = [];
-    Object.values(winners).forEach(vd => { vd.items.forEach(it => { if (it.itemName===itObj.name) winnerLines.push(it); }); });
+    Object.values(winners).forEach(vd => { vd.items.forEach(it => { if (it._uid===itObj._uid) winnerLines.push(it); }); });
 
     if (!winnerLines.length) {
       aoa.push([itObj.itemId||'', itObj.name, itObj.qty, itObj.uom, Math.round(itObj.basePriceIDR), 'Not Awarded', '', '', '', '']);
@@ -795,7 +810,7 @@ function renderPreview() {
   const vhdr = d.vendors.map(v=>`<th style="text-align:right;max-width:120px">${v.name}</th>`).join('');
   const trows = d.items.map(it => {
     const vcells = d.vendors.map(v => {
-      const vi = v.items.find(x=>x.itemName===it.name);
+      const vi = v.items.find(x=>x._uid===it._uid);
       if (!vi) return `<td style="text-align:center;color:var(--muted)">—</td>`;
       const ltTag  = vi.leadTime   ? `<span style="font-size:9px;color:var(--muted)">LT: ${vi.leadTime}d</span>` : '';
       const stTag  = vi.shippingTerm ? `<span style="font-size:9px;color:var(--muted)">${vi.shippingTerm}</span>` : '';
@@ -845,13 +860,13 @@ function renderPreview() {
   // ── Winner selection — per item ────────────────────────────────────────
   const autoTicked = []; // [ii, vi] pairs auto-selected because they're the sole valid bidder for that item
   const winnerRows = d.items.map((it,ii) => {
-    const itemPrices = d.vendors.map(vv=>{ const x=vv.items.find(y=>y.itemName===it.name); return (x && x.bidPriceIDR>0) ? x.bidPriceIDR : Infinity; });
+    const itemPrices = d.vendors.map(vv=>{ const x=vv.items.find(y=>y._uid===it._uid); return (x && x.bidPriceIDR>0) ? x.bidPriceIDR : Infinity; });
     const minPriceIDR = Math.min(...itemPrices);
     // Auto-suggest: if exactly one vendor has a valid (non-zero) price for this item, auto-tick them as sole winner
-    const validVendorIdxs = d.vendors.map((v,vi)=>{ const x=v.items.find(y=>y.itemName===it.name); return (x && x.bidPrice>0 && x.bidPriceIDR>0) ? vi : null; }).filter(x=>x!==null);
+    const validVendorIdxs = d.vendors.map((v,vi)=>{ const x=v.items.find(y=>y._uid===it._uid); return (x && x.bidPrice>0 && x.bidPriceIDR>0) ? vi : null; }).filter(x=>x!==null);
     const soleValidVi = validVendorIdxs.length===1 ? validVendorIdxs[0] : null;
     const vendorInputs = d.vendors.map((v,vi) => {
-      const vItem = v.items.find(x=>x.itemName===it.name);
+      const vItem = v.items.find(x=>x._uid===it._uid);
       if (!vItem) return '';
       const isZeroPrice = !(vItem.bidPrice>0) || !(vItem.bidPriceIDR>0);
       const ltst = [vItem.leadTime?`LT: ${vItem.leadTime}d`:'', vItem.shippingTerm||''].filter(Boolean).join(' · ');
@@ -949,9 +964,9 @@ function toggleWinner(ii, vi, cb) {
 function checkFlag(ii, vi) {
   if (!excelData) return;
   const it = excelData.items[ii];
-  const vItem = excelData.vendors[vi].items.find(x=>x.itemName===it.name);
+  const vItem = excelData.vendors[vi].items.find(x=>x._uid===it._uid);
   if (!vItem) return;
-  const prices = excelData.vendors.map(vv=>{ const x=vv.items.find(y=>y.itemName===it.name); return (x&&x.bidPriceIDR>0)?x.bidPriceIDR:Infinity; });
+  const prices = excelData.vendors.map(vv=>{ const x=vv.items.find(y=>y._uid===it._uid); return (x&&x.bidPriceIDR>0)?x.bidPriceIDR:Infinity; });
   const minPriceIDR = Math.min(...prices);
   const isLowest = vItem.bidPriceIDR <= minPriceIDR;
   const cb   = document.getElementById(`w_${ii}_${vi}`);
@@ -1039,7 +1054,7 @@ function getWinnerData() {
       if (!cb?.checked) return;
       const awardedQty = Number(qtyEl?.value)||0;
       if (awardedQty <= 0) return;
-      const vItem = v.items.find(x=>x.itemName===it.name);
+      const vItem = v.items.find(x=>x._uid===it._uid);
       if (!vItem) return;
       if (!(vItem.bidPrice>0) || !(vItem.bidPriceIDR>0)) return; // guard: cannot award zero-price quote
       if (!result[v.name]) {
@@ -1051,10 +1066,10 @@ function getWinnerData() {
         };
       }
       const spendIDR = vItem.bidPriceIDR * awardedQty;
-      const allPrices = excelData.vendors.map(vv=>{ const x=vv.items.find(y=>y.itemName===it.name); return (x&&x.bidPriceIDR>0)?x.bidPriceIDR:Infinity; });
+      const allPrices = excelData.vendors.map(vv=>{ const x=vv.items.find(y=>y._uid===it._uid); return (x&&x.bidPriceIDR>0)?x.bidPriceIDR:Infinity; });
       const isLowest = vItem.bidPriceIDR <= Math.min(...allPrices);
       const rationale = document.getElementById(`rationale_${ii}_${vi}`)?.value || '';
-      result[v.name].items.push({ itemName:it.name, itemId:it.itemId||'', partNumber:vItem.partNumber||'', qty:awardedQty, uom:it.uom, bidPrice:vItem.bidPrice, currency:vItem.currency, bidPriceIDR:vItem.bidPriceIDR, spendIDR, isLowest, rationale, leadTime:vItem.leadTime||'', shippingTerm:vItem.shippingTerm||'' });
+      result[v.name].items.push({ _uid:it._uid, itemName:it.name, itemId:it.itemId||'', partNumber:vItem.partNumber||'', qty:awardedQty, uom:it.uom, bidPrice:vItem.bidPrice, currency:vItem.currency, bidPriceIDR:vItem.bidPriceIDR, spendIDR, isLowest, rationale, leadTime:vItem.leadTime||'', shippingTerm:vItem.shippingTerm||'' });
       result[v.name].totalSpendIDR += spendIDR;
     });
   });
@@ -1069,9 +1084,9 @@ function winnerMetrics(vData) {
   const d = excelData;
   let baseTotal=0, marketTotal=0;
   vData.items.forEach(wi => {
-    const it = d.items.find(x=>x.name===wi.itemName);
+    const it = d.items.find(x=>x._uid===wi._uid);
     if (it) baseTotal += it.basePriceIDR * wi.qty;
-    const prices = d.vendors.map(v=>{ const vi=v.items.find(x=>x.itemName===wi.itemName); return vi?vi.bidPriceIDR:0; }).filter(p=>p>0);
+    const prices = d.vendors.map(v=>{ const vi=v.items.find(x=>x._uid===wi._uid); return vi?vi.bidPriceIDR:0; }).filter(p=>p>0);
     const avgP = prices.length ? prices.reduce((a,b)=>a+b,0)/prices.length : 0;
     marketTotal += avgP * wi.qty;
   });
@@ -1184,7 +1199,7 @@ function gen() {
     // Total vs Last Price (aggregate across all winner items)
     if (lastPriceMap) {
       let totalLP=0, lpOk=true;
-      Object.values(winners).forEach(vd=>{ vd.items.forEach(wi=>{ const itObj=d.items.find(x=>x.name===wi.itemName); const lpr=itObj?getLastPrice(itObj):null; if(lpr&&lpr.lastPrice) totalLP+=lpr.lastPrice*wi.qty; else lpOk=false; }); });
+      Object.values(winners).forEach(vd=>{ vd.items.forEach(wi=>{ const itObj=d.items.find(x=>x._uid===wi._uid); const lpr=itObj?getLastPrice(itObj):null; if(lpr&&lpr.lastPrice) totalLP+=lpr.lastPrice*wi.qty; else lpOk=false; }); });
       if (totalLP>0) { const ld=(totalWinnerSpendIDR-totalLP)/totalLP; o += kv('Last Price (aggregate)', `${idr(totalLP)}  →  ${ld>=0?'↑':'↓'}${Math.abs(ld*100).toFixed(1)}% vs LP${!lpOk?' (partial coverage)':''}`, kw); }
     }
     o += '\n';
@@ -1204,7 +1219,7 @@ function gen() {
       if (marketOn()) o += kv('    Market Price',`${idr(m.marketTotal)}  →  ${m.savingsVsMarket>=0?'savings':'over'} ${idr(Math.abs(m.savingsVsMarket))}  (${Math.abs(m.marketPct*100).toFixed(1)}%)`, kw);
       if (lastPriceMap) {
         let vLP=0, vLPOk=true;
-        vData.items.forEach(wi=>{ const itObj=excelData.items.find(x=>x.name===wi.itemName); const lpr=itObj?getLastPrice(itObj):null; if(lpr&&lpr.lastPrice) vLP+=lpr.lastPrice*wi.qty; else vLPOk=false; });
+        vData.items.forEach(wi=>{ const itObj=excelData.items.find(x=>x._uid===wi._uid); const lpr=itObj?getLastPrice(itObj):null; if(lpr&&lpr.lastPrice) vLP+=lpr.lastPrice*wi.qty; else vLPOk=false; });
         if (vLP>0) { const ld=(vData.totalSpendIDR-vLP)/vLP; o += kv('    Last Price',`${idr(vLP)}  →  ${ld>=0?'↑':'↓'}${Math.abs(ld*100).toFixed(1)}% vs LP${!vLPOk?' (partial)':''}`, kw); }
       }
       o += '\n';
@@ -1244,13 +1259,13 @@ function gen() {
           const idPfx = it.itemId    ? `[${it.itemId}] ` : '';
           const pnSfx = it.partNumber ? ` [PN: ${it.partNumber}]` : '';
           o += `      ${j+1}. ${it.itemName}${pnSfx}  —  qty ${num(it.qty)} ${it.uom}  @  ${idrOrig(it.bidPriceIDR,it.bidPrice,it.currency)}/unit\n`;
-          const itObj2   = excelData.items.find(x=>x.name===it.itemName);
+          const itObj2   = excelData.items.find(x=>x._uid===it._uid);
           // Delta vs Base Price (always shown)
           if (itObj2 && itObj2.basePriceIDR && it.bidPriceIDR) {
             const db = (it.bidPriceIDR - itObj2.basePriceIDR) / itObj2.basePriceIDR;
             let deltaLine   = `         ${db>=0?'↑':'↓'}${Math.abs(db*100).toFixed(1)}% vs Base  (base: ${idr(itObj2.basePriceIDR)}/unit)`;
             if (marketOn()) {
-              const mktPrices = excelData.vendors.map(vv=>{ const x=vv.items.find(y=>y.itemName===it.itemName); return x?x.bidPriceIDR:0; }).filter(p=>p>0);
+              const mktPrices = excelData.vendors.map(vv=>{ const x=vv.items.find(y=>y._uid===it._uid); return x?x.bidPriceIDR:0; }).filter(p=>p>0);
               const mktAvg    = mktPrices.length ? mktPrices.reduce((a,b)=>a+b,0)/mktPrices.length : 0;
               const dm        = mktAvg ? (it.bidPriceIDR - mktAvg) / mktAvg : null;
               if (dm !== null) deltaLine += `\n         ${dm>=0?'↑':'↓'}${Math.abs(dm*100).toFixed(1)}% vs Market  (mkt: ${idr(mktAvg)}/unit)`;
