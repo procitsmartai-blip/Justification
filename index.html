@@ -308,7 +308,16 @@ let lastPriceMap = null;   // key: 'id::ItemID' or 'desc::lowercase_desc' → {l
 let declinedVendors = [];  // manual list — vendor names disqualified/declined, shown in Bidders List output
 
 const escAttr = s => String(s??'').replace(/"/g,'&quot;');
-function marketOn() { const el=document.getElementById('toggleMarketPrice'); return el ? el.checked : true; }
+// Market Price comparison is only like-for-like when every vendor priced every item.
+// If any vendor left an item unpriced (no quote / price = 0), Market Price savings are dropped.
+function marketUsable() {
+  if (!excelData) return true;
+  return excelData.vendors.every(vv => excelData.items.every(it => {
+    const x = vv.items.find(y => y._uid === it._uid);
+    return x && x.bidPrice > 0 && x.bidPriceIDR > 0;
+  }));
+}
+function marketOn() { const el=document.getElementById('toggleMarketPrice'); return (el ? el.checked : true) && marketUsable(); }
 
 // Format a date string to MM/YY for generated output. Accepts MM/YYYY, YYYY-MM(-DD), or MM/YY; falls back to original text.
 function toMMYY(dateStr) {
@@ -1131,10 +1140,10 @@ function updSum() {
       <div style="font-size:11px;font-weight:700;color:${m.savingsVsBase>=0?'var(--green)':'var(--red)'};margin-bottom:3px">
         ${idr(vData.totalSpendIDR)} vs ${idr(m.baseTotal)} → ${m.savingsVsBase>=0?'savings':'over'} ${idr(Math.abs(m.savingsVsBase))} (${Math.abs(m.basePct*100).toFixed(1)}%)
       </div>
-      <div class="sl">Total Spend vs Market Price</div>
+      ${marketUsable() ? `<div class="sl">Total Spend vs Market Price</div>
       <div style="font-size:11px;font-weight:700;color:${m.savingsVsMarket>=0?'var(--green)':'var(--red)'}">
         ${idr(vData.totalSpendIDR)} vs ${idr(m.marketTotal)} → ${m.savingsVsMarket>=0?'savings':'over'} ${idr(Math.abs(m.savingsVsMarket))} (${Math.abs(m.marketPct*100).toFixed(1)}%)
-      </div>
+      </div>` : ''}
     </div>`;
   }).join('');
 
@@ -1145,6 +1154,7 @@ function updSum() {
   setEl('s_cam',   idr(Math.abs(caVsMarket)),  caVsMarket>=0);
   setEl('s_pct',   (Math.abs(c.marketPriceIDR?caVsMarket/c.marketPriceIDR:0)*100).toFixed(1)+'%', caVsMarket>=0);
   document.getElementById('s_win').textContent = Object.keys(winners).join(', ');
+  ['s_cam','s_pct'].forEach(eid => { const el=document.getElementById(eid); if (el && el.parentElement) el.parentElement.style.display = marketUsable() ? '' : 'none'; });
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -1254,6 +1264,16 @@ function gen() {
           o += kv('  Items Awarded',        `${vData.items.length} items`, 30);
           o += kv('  Total Awarded Spend',  idr(vData.totalSpendIDR), 30);
           o += '      (See exported comparison Excel for full item-level pricing detail)\n';
+          // Non-lowest bids: print buyer rationale under the related vendor
+          const nonLowest = vData.items.filter(it => !it.isLowest);
+          if (nonLowest.length) {
+            o += '\n      Non-lowest bid rationale:\n';
+            nonLowest.forEach((it,k)=>{
+              const r = (it.rationale||'').replace(/\s+/g,' ').trim() || '[TO BE FILLED]';
+              o += `        ${k+1}. ${it.itemName}\n`;
+              o += wrap(r, W-11, ' '.repeat(11)) + '\n';
+            });
+          }
         } else {
         vData.items.forEach((it,j)=>{
           const idPfx = it.itemId    ? `[${it.itemId}] ` : '';
