@@ -770,8 +770,11 @@ function exportComparisonExcel() {
   const d = excelData;
   const winners = getWinnerData();
 
+  const hasLP  = !!lastPriceMap;   // Last PO file uploaded → also export each item's last PO identity
   const header = ['Item ID','Item Description','Qty','UOM','Base Price (IDR)','Winner Price','Item P/N (if any)','% vs Base Price','% vs Last PO','% vs Market Price'];
+  if (hasLP) header.push('Last PO Number','Last PO Date','Last PO Vendor');
   const aoa = [header];
+  const lpIdentity = lpr => hasLP ? [lpr ? (lpr.poNumber||'') : '', lpr ? toMMYY(lpr.poDate) : '', lpr ? (lpr.vendor||'') : ''] : [];
   const pct = n => (n===null||n===undefined||isNaN(n)) ? '' : (n*100).toFixed(1)+'%';
 
   // Build set of item names that have at least one winner, so un-awarded items still get a row
@@ -788,7 +791,7 @@ function exportComparisonExcel() {
     Object.values(winners).forEach(vd => { vd.items.forEach(it => { if (it._uid===itObj._uid) winnerLines.push(it); }); });
 
     if (!winnerLines.length) {
-      aoa.push([itObj.itemId||'', itObj.name, itObj.qty, itObj.uom, Math.round(itObj.basePriceIDR), 'Not Awarded', '', '', '', '']);
+      aoa.push([itObj.itemId||'', itObj.name, itObj.qty, itObj.uom, Math.round(itObj.basePriceIDR), 'Not Awarded', '', '', '', '', ...lpIdentity(lpr)]);
       return;
     }
 
@@ -798,7 +801,8 @@ function exportComparisonExcel() {
       const vsMarket = mktAvg ? (wl.bidPriceIDR - mktAvg)/mktAvg : null;
       aoa.push([
         itObj.itemId||'', itObj.name, wl.qty, wl.uom, Math.round(itObj.basePriceIDR),
-        Math.round(wl.bidPriceIDR), wl.partNumber||'', pct(vsBase), pct(vsLP), pct(vsMarket)
+        Math.round(wl.bidPriceIDR), wl.partNumber||'', pct(vsBase), pct(vsLP), pct(vsMarket),
+        ...lpIdentity(lpr)
       ]);
     });
   });
