@@ -652,6 +652,7 @@ function parseExcel(data) {
   const iHdr = headerMap(sItems);
   const C = {
     supplier: col(iHdr,'supplier name'),
+    respId:   col(iHdr,'response id'),
     itemId:   col(iHdr,'item id'),
     itemDesc: col(iHdr,'item description'),
     qty:      col(iHdr,'expected quantity'),      // note: appears twice in header; first match = col 9, but qty for pricing uses the later "Expected Quantity (Number)" — resolved below with fallback
@@ -684,10 +685,19 @@ function parseExcel(data) {
 
   // Build IDR lookup: key = `${supplier}::${platformId}` (falls back to description
   // only if this row has no platform Item ID at all)
+  // A supplier can submit more than one response to the same event (each has its own Response ID
+  // and its own prices) — every response is treated as a separate vendor response. Response ID is
+  // the key; supplier name is only used if the sheet has no Response ID column.
+  const sHdr = headerMap(sSavings);
+  const tHdr = sTotal ? headerMap(sTotal) : {};
+  const respKeyOf = (row, idx) => {
+    const rid = (idx>=0 && row[idx]!=null) ? String(row[idx]).trim() : '';
+    return rid || String(row[2]||'').trim();
+  };
   const idrLookup = {};
   savingsRows.forEach(r => {
     const pid = platformIdOf(r) || String(r[8]||'');
-    const key = `${String(r[2]||'').trim()}::${pid}`;
+    const key = `${respKeyOf(r, col(sHdr,'response id'))}::${pid}`;
     idrLookup[key] = { basePriceIDR: Number(r[13])||0, bidPriceIDR: Number(r[14])||0 };
   });
 
@@ -728,11 +738,12 @@ function parseExcel(data) {
     const partNumber  = val(r,C.partNum)!=null ? String(val(r,C.partNum)).trim() : '';
     const shippingTerm= val(r,C.shipTerm)!=null ? String(val(r,C.shipTerm)).trim() : '';
     const itemId      = extractItemId(itemName, platformId);
-    const idr         = idrLookup[`${supplier}::${uid}`] || {basePriceIDR:0, bidPriceIDR:0};
+    const rKey        = (C.respId>=0 && val(r,C.respId)!=null && String(val(r,C.respId)).trim()) ? String(val(r,C.respId)).trim() : supplier;
+    const idr         = idrLookup[`${rKey}::${uid}`] || {basePriceIDR:0, bidPriceIDR:0};
     // Fallback backfill only (Item Savings' own itemId, set above, is preferred and already present in most cases)
     if (itemsMap[uid] && itemId && !itemsMap[uid].itemId) itemsMap[uid].itemId = itemId;
-    if (!vendorsMap[supplier]) vendorsMap[supplier] = { name:supplier, items:[], totalBidIDR:0 };
-    vendorsMap[supplier].items.push({ _uid:uid, itemName, qty, bidPrice, currency, bidPriceIDR:idr.bidPriceIDR, spendIDR:idr.bidPriceIDR*qty, leadTime, shippingTerm, partNumber, itemId });
+    if (!vendorsMap[rKey]) vendorsMap[rKey] = { name:supplier, supplier, respId:rKey, items:[], totalBidIDR:0 };
+    vendorsMap[rKey].items.push({ _uid:uid, itemName, qty, bidPrice, currency, bidPriceIDR:idr.bidPriceIDR, spendIDR:idr.bidPriceIDR*qty, leadTime, shippingTerm, partNumber, itemId });
   });
 
   const items = Object.values(itemsMap);
@@ -740,8 +751,8 @@ function parseExcel(data) {
   // Total Savings — per vendor IDR totals
   if (sTotal) {
     rows(sTotal).forEach(r => {
-      const supplier = String(r[2]||'').trim();
-      if (vendorsMap[supplier]) vendorsMap[supplier].totalBidIDR = Number(r[6])||0;
+      const rk = respKeyOf(r, col(tHdr,'response id'));
+      if (vendorsMap[rk]) vendorsMap[rk].totalBidIDR = Number(r[6])||0;
     });
   } else {
     // Fallback: sum item spend
@@ -751,6 +762,10 @@ function parseExcel(data) {
   }
 
   const vendors = Object.values(vendorsMap);
+  // Supplier with several responses → label each with its Response ID so they stay distinguishable
+  const respCount = {};
+  vendors.forEach(v => { respCount[v.supplier] = (respCount[v.supplier]||0) + 1; });
+  vendors.forEach(v => { if (respCount[v.supplier] > 1) v.name = `${v.supplier} (Resp #${v.respId})`; });
   if (!items.length || !vendors.length) return null;
   const totalBaseIDR   = items.reduce((s,it)=>s+it.baseTotalIDR, 0);
   const allVendorIDR   = vendors.reduce((s,v)=>s+v.totalBidIDR, 0);
@@ -1190,7 +1205,7 @@ function gen() {
   const need=v('bg_need'), oa=v('bg_oa');
   o += '\n1.BACKGROUND & RATIONALE\n';
   if (need) o += '  Operational Need:\n'+wrap(need)+'\n\n';
-  if (oa)   o += '  Previous OA / PO Reference:\n'+wrap(oa)+'\n\n';
+  if (oa)   o += '  Previous OA / PO Reference:\n'+oa.split('\n').map(l=>'  '+l.replace(/\s+$/,'')).join('\n')+'\n\n';   // no wrapping: each reference stays on one row
 
   // ── 2. Award Summary ─────────────────────────────────────────────────────
   if (excelData && Object.keys(winners).length) {
